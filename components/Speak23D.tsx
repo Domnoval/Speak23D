@@ -18,6 +18,7 @@ const MM = 0.001;
 const FONT_MAP: Record<string, { label: string; file: string }> = {
   helvetiker: { label: "Helvetiker Bold", file: "/fonts/helvetiker_bold.typeface.json" },
   optimer: { label: "Optimer Bold", file: "/fonts/optimer_bold.typeface.json" },
+  greatvibes: { label: "Great Vibes (Connected Script)", file: "/fonts/great_vibes.typeface.json" },
   playfair: { label: "Playfair Display", file: "/fonts/playfair_display_bold.typeface.json" },
   blackops: { label: "Black Ops One", file: "/fonts/black_ops_one.typeface.json" },
   poiret: { label: "Poiret One", file: "/fonts/poiret_one.typeface.json" },
@@ -50,6 +51,7 @@ type WallTexture = "brick" | "wood_siding" | "stucco" | "modern_render";
 // ═══ Types ═══════════════════════════════════════════════════════════════
 type BackplateShape = "rectangle" | "rounded_rect" | "oval" | "arch" | "auto_contour" | "none";
 type MountType = "none" | "2hole" | "4hole" | "french_cleat" | "keyhole";
+type NoBackplateMountType = "flush" | "standoff" | "adhesive";
 type LineAlign = "left" | "center" | "right";
 
 interface LineConfig {
@@ -76,6 +78,8 @@ interface Params {
   reflector: "parabolic" | "faceted" | "none";
   showMountingPoints: boolean;
   letterMounting: boolean;
+  noBackplateMountType: NoBackplateMountType;
+  haloLED: boolean;
   // LED visualization
   ledOn: boolean;
   ledColorPreset: string;
@@ -102,6 +106,8 @@ const DEFAULT_PARAMS: Params = {
   reflector: "none",
   showMountingPoints: false,
   letterMounting: true,
+  noBackplateMountType: "flush",
+  haloLED: false,
   ledOn: true,
   ledColorPreset: "warm_white",
   ledCustomColor: "#FF00FF",
@@ -130,14 +136,19 @@ function getRecommendations(params: Params): Recommendation {
   const isLong = allText.length > 12;
   const wordCount = allText.split(/\s+/).filter(Boolean).length;
   const isName = wordCount >= 1 && wordCount <= 3 && !isNumbersOnly && /[a-zA-Z]/.test(allText);
+  const isNoBackplate = params.backplateShape === "none";
 
   let font = "";
-  if (isNumbersOnly) {
+  if (isNoBackplate && params.font === "poiret" && params.depthMM < 15) {
+    font = "⚠️ WARNING: Poiret One is fragile for standalone letters under 15mm depth. Use Helvetiker Bold or increase depth to 15mm+ for structural integrity.";
+  } else if (isNoBackplate && params.depthMM < 15) {
+    font = "⚠️ Standalone letters: Recommend 15mm+ depth for structural integrity. Bold fonts (Helvetiker, Black Ops One) are strongest. Great Vibes connected script provides structural joining between letters.";
+  } else if (isNumbersOnly) {
     font = "House numbers → clean sans-serif (Helvetiker) or slab serif (Alfa Slab One) for maximum readability at distance.";
   } else if (isName && isShort) {
-    font = "Short name/word → bold display fonts work great. Try Black Ops One for modern, Playfair Display for elegant, or Pacifico for a friendly script look.";
+    font = "Short name/word → bold display fonts work great. Try Black Ops One for modern, Playfair Display for elegant, or Great Vibes for connected script elegance.";
   } else if (isName && !isShort) {
-    font = "Longer name → use a compact, readable font. Helvetiker or Optimer Bold keeps it clean. Avoid wide scripts like Pacifico for long text.";
+    font = "Longer name → use a compact, readable font. Helvetiker or Optimer Bold keeps it clean. Great Vibes connects letters for strength.";
   } else if (isLong) {
     font = "Long text → needs a compact font. Helvetiker Bold or Poiret One (thin strokes) keep overall width manageable.";
   } else if (isShort) {
@@ -156,13 +167,21 @@ function getRecommendations(params: Params): Recommendation {
   let style = "";
   const shape = params.backplateShape;
   if (shape === "none") {
-    style = "No backplate = modern floating letter look. Works best with thick, bold fonts. Letters mount directly to wall with hidden screws.";
+    let mountAdvice = "";
+    if (params.noBackplateMountType === "flush") {
+      mountAdvice = " Flush mount (hidden screws) gives clean look. Drilling template included.";
+    } else if (params.noBackplateMountType === "standoff") {
+      mountAdvice = " Standoff mount creates premium floating effect with halo shadows.";
+    } else {
+      mountAdvice = " Adhesive mount for lightweight indoor signs only.";
+    }
+    style = `No backplate = modern floating letter look. Works best with thick, bold fonts (15mm+ depth).${mountAdvice} ${allText.length * params.heightMM < 1500 ? "Good size for halo LED strips." : "Too large for easy LED strip routing."}`;
   } else if (shape === "rounded_rect") {
     style = "Rounded rectangle = modern/contemporary feel. Pair with sans-serif fonts. Great for new builds.";
   } else if (shape === "arch") {
     style = "Arch shape = traditional/classical. Pairs beautifully with serif fonts like Playfair Display.";
   } else if (shape === "oval") {
-    style = "Oval = soft, welcoming. Works with script fonts (Pacifico) or classic serifs.";
+    style = "Oval = soft, welcoming. Works with script fonts (Great Vibes, Pacifico) or classic serifs.";
   } else {
     style = "Rectangle = clean and universal. Modern home → pair with sans-serif. Traditional → serif works too.";
   }
@@ -199,6 +218,8 @@ function encodeParamsToURL(params: Params): string {
     lc: params.ledColorPreset,
     lcc: params.ledCustomColor,
     lb: String(params.ledBrightness),
+    nbm: params.noBackplateMountType,
+    hl: params.haloLED ? "1" : "0",
   };
   const sp = new URLSearchParams(data);
   return `${window.location.origin}${window.location.pathname}?${sp.toString()}`;
@@ -233,6 +254,8 @@ function decodeParamsFromURL(): Partial<Params> | null {
   if (sp.has("lc")) result.ledColorPreset = sp.get("lc")!;
   if (sp.has("lcc")) result.ledCustomColor = sp.get("lcc")!;
   if (sp.has("lb")) result.ledBrightness = Number(sp.get("lb"));
+  if (sp.has("nbm")) result.noBackplateMountType = sp.get("nbm") as NoBackplateMountType;
+  if (sp.has("hl")) result.haloLED = sp.get("hl") === "1";
   return result;
 }
 
@@ -423,31 +446,109 @@ function addLetterMountingHoles(letterMesh: THREE.Mesh, params: Params): THREE.M
   const ch = (letterMesh.userData?.char as string) || "";
   const isNarrow = narrowChars.has(ch) || lw < params.heightMM * MM * params.scaleFactor * 0.4;
 
-  const holeXPositions: number[] = [];
-  if (isNarrow || lw < throughR * 16) {
-    holeXPositions.push(cx);
-  } else {
-    holeXPositions.push(bb.min.x + lw * 0.25);
-    holeXPositions.push(bb.min.x + lw * 0.75);
-  }
-
   let result = letterMesh;
-  for (const hx of holeXPositions) {
-    const through = cylMesh(throughR, d * 3, 0x666666);
-    through.rotation.set(Math.PI / 2, 0, 0);
-    through.position.set(hx, cy, backZ);
-    through.updateMatrixWorld(true);
-    result = safeCSG(result, through, "subtract");
-    result.updateMatrixWorld(true);
 
-    const counter = cylMesh(counterR, counterDepth, 0x666666);
-    counter.rotation.set(Math.PI / 2, 0, 0);
-    counter.position.set(hx, cy, bb.min.z + counterDepth / 2);
-    counter.updateMatrixWorld(true);
-    result = safeCSG(result, counter, "subtract");
+  // Add standoff cylinders for standoff mount
+  if (params.noBackplateMountType === "standoff") {
+    const standoffR = 2.5 * MM * params.scaleFactor;
+    const standoffH = 12 * MM * params.scaleFactor;
+    
+    const holeXPositions: number[] = [];
+    if (isNarrow || lw < standoffR * 8) {
+      holeXPositions.push(cx);
+    } else {
+      holeXPositions.push(bb.min.x + lw * 0.25);
+      holeXPositions.push(bb.min.x + lw * 0.75);
+    }
+
+    for (const hx of holeXPositions) {
+      // Add standoff cylinder extending from back
+      const standoff = cylMesh(standoffR, standoffH, 0x666666);
+      standoff.rotation.set(Math.PI / 2, 0, 0);
+      standoff.position.set(hx, cy, bb.min.z - standoffH / 2);
+      standoff.updateMatrixWorld(true);
+      result = safeCSG(result, standoff, "union");
+      result.updateMatrixWorld(true);
+
+      // Threaded rod hole through standoff
+      const rodHole = cylMesh(1.5 * MM * params.scaleFactor, standoffH + d, 0x666666);
+      rodHole.rotation.set(Math.PI / 2, 0, 0);
+      rodHole.position.set(hx, cy, bb.min.z - standoffH / 2);
+      rodHole.updateMatrixWorld(true);
+      result = safeCSG(result, rodHole, "subtract");
+      result.updateMatrixWorld(true);
+    }
+  } else if (params.noBackplateMountType === "flush") {
+    // Standard flush mount holes
+    const holeXPositions: number[] = [];
+    if (isNarrow || lw < throughR * 16) {
+      holeXPositions.push(cx);
+    } else {
+      holeXPositions.push(bb.min.x + lw * 0.25);
+      holeXPositions.push(bb.min.x + lw * 0.75);
+    }
+
+    for (const hx of holeXPositions) {
+      const through = cylMesh(throughR, d * 3, 0x666666);
+      through.rotation.set(Math.PI / 2, 0, 0);
+      through.position.set(hx, cy, backZ);
+      through.updateMatrixWorld(true);
+      result = safeCSG(result, through, "subtract");
+      result.updateMatrixWorld(true);
+
+      const counter = cylMesh(counterR, counterDepth, 0x666666);
+      counter.rotation.set(Math.PI / 2, 0, 0);
+      counter.position.set(hx, cy, bb.min.z + counterDepth / 2);
+      counter.updateMatrixWorld(true);
+      result = safeCSG(result, counter, "subtract");
+      result.updateMatrixWorld(true);
+    }
+  }
+  // No holes for adhesive mount
+
+  return result;
+}
+
+function addHaloLEDChannel(letterMesh: THREE.Mesh, params: Params): THREE.Mesh {
+  if (!params.haloLED) return letterMesh;
+
+  letterMesh.geometry.computeBoundingBox();
+  const bb = letterMesh.geometry.boundingBox!.clone();
+  bb.applyMatrix4(letterMesh.matrixWorld);
+  
+  const channelWidth = 8 * MM * params.scaleFactor; // LED strip width
+  const channelDepth = 2 * MM * params.scaleFactor; // Recessed depth
+  const margin = 3 * MM * params.scaleFactor; // Distance from letter edge
+  
+  // Create channel outline slightly smaller than letter
+  const insetW = (bb.max.x - bb.min.x) - margin * 2;
+  const insetH = (bb.max.y - bb.min.y) - margin * 2;
+  
+  if (insetW < channelWidth || insetH < channelWidth) {
+    // Letter too small for LED channel
+    return letterMesh;
+  }
+  
+  const cx = (bb.min.x + bb.max.x) / 2;
+  const cy = (bb.min.y + bb.max.y) / 2;
+  
+  // Create recessed channel on back face
+  const channel = boxMesh(insetW, channelWidth, channelDepth, 0x666666);
+  channel.position.set(cx, cy, bb.min.z + channelDepth / 2);
+  channel.updateMatrixWorld(true);
+  
+  let result = safeCSG(letterMesh, channel, "subtract");
+  result.updateMatrixWorld(true);
+  
+  // Add vertical channel for tall letters
+  if (insetH > channelWidth * 2) {
+    const vChannel = boxMesh(channelWidth, insetH, channelDepth, 0x666666);
+    vChannel.position.set(cx, cy, bb.min.z + channelDepth / 2);
+    vChannel.updateMatrixWorld(true);
+    result = safeCSG(result, vChannel, "subtract");
     result.updateMatrixWorld(true);
   }
-
+  
   return result;
 }
 
@@ -832,6 +933,7 @@ function addLEDVisualization(
     : (LED_COLOR_PRESETS[params.ledColorPreset]?.color || "#FFE4B5");
   const color3 = new THREE.Color(ledColor);
   const [ledW, ledD] = LED_CHANNELS[params.ledType] || [12, 4];
+  const isNoBackplate = params.backplateShape === "none";
 
   for (const letter of letters) {
     letter.geometry.computeBoundingBox();
@@ -840,34 +942,88 @@ function addLEDVisualization(
     const lCx = (bb.min.x + bb.max.x) / 2;
     const lCy = (bb.min.y + bb.max.y) / 2;
     const chLen = (bb.max.y - bb.min.y) * 0.8;
-    const channelZ = bb.min.z - ledD * MM * 0.5;
 
-    // Channel groove geometry (dark recessed channel)
-    const channelGeo = new THREE.BoxGeometry(
-      ledW * MM * 1.1,
-      Math.max(chLen, ledW * MM),
-      ledD * MM
-    );
-    const channelMat = params.ledOn
-      ? new THREE.MeshStandardMaterial({
-        color: color3,
-        emissive: color3,
-        emissiveIntensity: params.ledBrightness * 1.2,
-        roughness: 0.2,
-      })
-      : new THREE.MeshStandardMaterial({
-        color: 0x111111,
-        roughness: 0.9,
-      });
-    const channel = new THREE.Mesh(channelGeo, channelMat);
-    channel.position.set(lCx, lCy, channelZ);
-    group.add(channel);
+    if (isNoBackplate && params.haloLED) {
+      // Halo LED effect - creates glow behind letters
+      const channelZ = bb.min.z - 2 * MM;
 
-    // Add point light per letter when on
-    if (params.ledOn) {
-      const pl = new THREE.PointLight(color3, params.ledBrightness * 0.5, 0.15);
-      pl.position.set(lCx, lCy, channelZ + ledD * MM);
-      group.add(pl);
+      // LED strip visualization behind letter
+      const haloGeo = new THREE.RingGeometry(
+        (bb.max.x - bb.min.x) * 0.4,
+        (bb.max.x - bb.min.x) * 0.6,
+        8
+      );
+      const haloMat = params.ledOn
+        ? new THREE.MeshStandardMaterial({
+          color: color3,
+          emissive: color3,
+          emissiveIntensity: params.ledBrightness * 0.8, // Max at 0.8 as specified
+          roughness: 0.1,
+          transparent: true,
+          opacity: 0.7,
+        })
+        : new THREE.MeshStandardMaterial({
+          color: 0x111111,
+          roughness: 0.9,
+          transparent: true,
+          opacity: 0.3,
+        });
+      const halo = new THREE.Mesh(haloGeo, haloMat);
+      halo.position.set(lCx, lCy, channelZ);
+      group.add(halo);
+
+      // Create halo glow effect - emissive plane behind letter
+      if (params.ledOn) {
+        const glowSize = Math.max(bb.max.x - bb.min.x, bb.max.y - bb.min.y) * 1.8;
+        const glowGeo = new THREE.PlaneGeometry(glowSize, glowSize);
+        const glowMat = new THREE.MeshStandardMaterial({
+          color: color3,
+          emissive: color3,
+          emissiveIntensity: params.ledBrightness * 0.3,
+          transparent: true,
+          opacity: 0.2,
+          side: THREE.DoubleSide,
+        });
+        const glow = new THREE.Mesh(glowGeo, glowMat);
+        glow.position.set(lCx, lCy, channelZ - 1 * MM);
+        group.add(glow);
+
+        // Point light for halo effect
+        const haloLight = new THREE.PointLight(color3, params.ledBrightness * 0.4, 0.2);
+        haloLight.position.set(lCx, lCy, channelZ);
+        group.add(haloLight);
+      }
+    } else if (params.housing) {
+      // Regular backplate housing LED channels
+      const channelZ = bb.min.z - ledD * MM * 0.5;
+
+      // Channel groove geometry (dark recessed channel)
+      const channelGeo = new THREE.BoxGeometry(
+        ledW * MM * 1.1,
+        Math.max(chLen, ledW * MM),
+        ledD * MM
+      );
+      const channelMat = params.ledOn
+        ? new THREE.MeshStandardMaterial({
+          color: color3,
+          emissive: color3,
+          emissiveIntensity: params.ledBrightness * 1.2,
+          roughness: 0.2,
+        })
+        : new THREE.MeshStandardMaterial({
+          color: 0x111111,
+          roughness: 0.9,
+        });
+      const channel = new THREE.Mesh(channelGeo, channelMat);
+      channel.position.set(lCx, lCy, channelZ);
+      group.add(channel);
+
+      // Add point light per letter when on
+      if (params.ledOn) {
+        const pl = new THREE.PointLight(color3, params.ledBrightness * 0.5, 0.15);
+        pl.position.set(lCx, lCy, channelZ + ledD * MM);
+        group.add(pl);
+      }
     }
   }
 
@@ -1243,13 +1399,13 @@ function export3MF(mesh: THREE.Mesh): Blob {
   return createZipBlob({ "[Content_Types].xml": contentTypes, "_rels/.rels": rels, "3D/3dmodel.model": model });
 }
 
-function createZipBlob(files: Record<string, string>): Blob {
+function createZipBlob(files: Record<string, string | Uint8Array>): Blob {
   const entries: { name: Uint8Array; data: Uint8Array; offset: number }[] = [];
   const parts: Uint8Array[] = [];
   let offset = 0;
   for (const [name, content] of Object.entries(files)) {
     const nameBytes = new TextEncoder().encode(name);
-    const dataBytes = new TextEncoder().encode(content);
+    const dataBytes = typeof content === 'string' ? new TextEncoder().encode(content) : content;
     const localHeader = new Uint8Array(30 + nameBytes.length);
     const dv = new DataView(localHeader.buffer);
     dv.setUint32(0, 0x04034b50, true);
@@ -1288,7 +1444,171 @@ function createZipBlob(files: Record<string, string>): Blob {
   dv.setUint16(10, entries.length, true);
   dv.setUint32(12, cdSize, true);
   dv.setUint32(16, offset, true);
-  return new Blob([...parts.map(p => p.buffer as ArrayBuffer), ...cdParts.map(p => p.buffer as ArrayBuffer), eocd.buffer as ArrayBuffer], { type: "application/vnd.ms-package.3dmanufacturing-3dmodel+xml" });
+  return new Blob([...parts.map(p => p.buffer as ArrayBuffer), ...cdParts.map(p => p.buffer as ArrayBuffer), eocd.buffer as ArrayBuffer], { type: "application/zip" });
+}
+
+function generateAssemblyInstructions(params: Params, mountingPoints: MountingPoint[], dims?: string, assembly?: { letters?: THREE.Mesh[]; face?: THREE.Mesh; back?: THREE.Mesh; cleat?: THREE.Mesh; diffuser?: THREE.Mesh }): string {
+  const text = params.lines.map(l => l.text).join(" ");
+  const isNoBackplate = params.backplateShape === "none";
+  
+  let instructions = `# Speak23D Assembly Instructions
+Sign: "${text}"
+Dimensions: ${dims || "Generate model to see dimensions"}
+Font: ${FONT_MAP[params.font]?.label || params.font}
+Created: ${new Date().toLocaleDateString()}
+
+## Overview
+${isNoBackplate ? `This is a floating letter sign with no backplate. Each letter mounts individually to the wall.` : `This is a full housing sign with backplate and face plate.`}
+
+## Parts List
+`;
+
+  if (isNoBackplate && assembly?.letters && assembly.letters.length > 0) {
+    instructions += `### Letters (print individually)
+`;
+    assembly.letters.forEach((letter, i) => {
+      const char = letter.userData?.char || `Letter${i+1}`;
+      instructions += `- ${char}.3mf - Letter "${char}"\n`;
+    });
+
+    if (params.noBackplateMountType === "flush") {
+      instructions += `
+### Hardware (for flush mount)
+Per mounting point (${mountingPoints.length} total):
+- 1x M3 x 25mm screw (or appropriate length for your wall)
+- 1x M3 wall anchor (rawl plug/drywall anchor as appropriate)
+
+### Tools Required
+- Drill with 3mm bit for pilot holes
+- 6mm bit for counterbores (if pre-drilling)
+- Level
+- Pencil for marking
+`;
+    } else if (params.noBackplateMountType === "standoff") {
+      instructions += `
+### Hardware (for standoff mount)
+Per mounting point (${mountingPoints.length} total):
+- 1x M3 x 40mm threaded rod
+- 2x M3 nuts
+- 1x M3 wall anchor
+- 1x M3 x 10mm spacer/washer (optional for fine adjustment)
+
+### Tools Required
+- Drill with 3mm bit
+- Level
+- Allen keys or screwdriver
+`;
+    } else {
+      instructions += `
+### Hardware (adhesive mount)
+- High-strength double-sided tape or VHB tape
+- Surface cleaner/degreaser
+
+### Tools Required
+- Level
+- Cleaning cloth
+`;
+    }
+
+    instructions += `
+## Installation Steps
+
+### Step 1: Positioning
+1. Hold letters against wall in desired position
+2. Use level to ensure proper alignment
+3. Mark outline lightly with pencil if needed
+
+`;
+
+    if (params.noBackplateMountType === "flush") {
+      instructions += `### Step 2: Drilling Template
+1. Print the included drilling_template.svg at 100% scale (no scaling)
+2. Tape template to wall in desired position
+3. Use 3mm drill bit to create pilot holes through template
+4. Remove template
+
+### Step 3: Mount Letters
+1. Align each letter with its mounting holes over the drilled pilots
+2. Drive M3 screws through the back of each letter into the wall anchors
+3. Screws should sit flush with the back surface of the letters
+4. Check alignment and adjust as needed
+`;
+    } else if (params.noBackplateMountType === "standoff") {
+      instructions += `### Step 2: Install Wall Anchors
+1. Mark mounting positions (see template if available)
+2. Drill 3mm pilot holes
+3. Install wall anchors
+
+### Step 3: Install Standoffs
+1. Thread M3 nuts onto threaded rods, about 15mm from wall end
+2. Screw threaded rods into wall anchors, leaving 12mm extending from wall
+3. Slide letters onto threaded rods from front
+4. Secure with second M3 nut, tightening against back of letter
+`;
+    } else {
+      instructions += `### Step 2: Surface Preparation
+1. Clean wall surface with degreaser
+2. Let dry completely
+3. Clean back surface of letters
+
+### Step 3: Apply Adhesive
+1. Apply VHB tape to back of each letter
+2. Remove backing when ready to mount
+3. Press firmly against wall for 30 seconds each
+4. Allow 24 hours for full bond strength
+`;
+    }
+
+    if (params.haloLED) {
+      instructions += `
+### Step 4: LED Installation (Optional Halo Effect)
+1. Route LED strip behind each letter in the recessed channels
+2. Connect LED strips in series or parallel as needed
+3. Connect to appropriate power supply (5V/12V depending on strips)
+4. Test before final mounting
+5. Use cable management to hide wiring
+`;
+    }
+
+  } else {
+    // Full housing instructions
+    instructions += `### Components
+- face_plate.3mf - Main face with letters
+- back_plate.3mf - Housing back with LED channels
+${params.mountType === "french_cleat" ? "- wall_cleat.3mf - Wall mounting cleat\n" : ""}
+- diffuser.3mf - LED light diffuser
+
+### Hardware
+${params.mountType === "french_cleat" ? "- French cleat mounting (no screws needed)\n" : 
+  params.mountType === "2hole" || params.mountType === "4hole" ? `- ${params.mountType === "2hole" ? "2" : "4"}x M${params.holeDiameterMM} screws and anchors\n` :
+  params.mountType === "keyhole" ? "- 2x M5 screws with washers\n" : ""}
+- LED strip (${LED_CHANNELS[params.ledType][0]}mm width, ${params.ledType.includes("5v") ? "5V" : "12V"})
+- LED power supply
+
+### Installation
+1. Print all parts in ASA or PETG for outdoor use
+2. Install LED strips in back plate channels
+3. Connect to power supply and test
+4. Install diffuser in face plate
+5. Assemble face and back plates
+${params.mountType === "french_cleat" ? "6. Install wall cleat with screws\n7. Hang sign on cleat" : 
+  "6. Mark and drill mounting holes\n7. Mount to wall with screws"}
+`;
+  }
+
+  instructions += `
+## Notes
+- For outdoor installation, use weather-resistant hardware
+- Ensure all electrical connections are weatherproofed
+- Test LED functionality before final installation
+- Check local electrical codes for outdoor LED installations
+
+## Support
+Generated by Speak23D (speak23d.vercel.app)
+For support: https://tonicthoughtstudios.com
+`;
+
+  return instructions;
 }
 
 function crc32(data: Uint8Array): number {
@@ -1440,6 +1760,13 @@ export default function Speak23D() {
       setParams(p => ({ ...p, ...urlParams }));
     }
   }, []);
+
+  // Auto-enable letterMounting when no backplate is selected
+  useEffect(() => {
+    if (params.backplateShape === "none" && !params.letterMounting && params.noBackplateMountType !== "adhesive") {
+      setParams(p => ({ ...p, letterMounting: true }));
+    }
+  }, [params.backplateShape, params.letterMounting, params.noBackplateMountType]);
 
   const loadFont = useCallback((fontKey: string, callback: (font: Font) => void) => {
     if (fontCacheRef.current[fontKey]) {
@@ -1615,9 +1942,17 @@ export default function Speak23D() {
             const processedLetters: THREE.Mesh[] = [];
             for (const l of letters) {
               let processed = l;
-              if (isNoBackplate && params.letterMounting) {
-                processed = addLetterMountingHoles(l, params);
+              
+              // Add halo LED channels if enabled
+              if (isNoBackplate && params.haloLED) {
+                processed = addHaloLEDChannel(processed, params);
               }
+              
+              // Add mounting holes if enabled
+              if (isNoBackplate && (params.letterMounting || params.noBackplateMountType !== "adhesive")) {
+                processed = addLetterMountingHoles(processed, params);
+              }
+              
               scene.add(processed);
               processedLetters.push(processed);
             }
@@ -1782,6 +2117,62 @@ export default function Speak23D() {
     a.href = url; a.download = `${name}.${format}`; a.click();
     URL.revokeObjectURL(url);
   }, []);
+
+  const downloadBambuStudioBundle = useCallback(async () => {
+    const files: Record<string, string | Uint8Array> = {};
+    const text = params.lines.map(l => l.text).join(" ").replace(/\s+/g, "_");
+    const isNoBackplate = params.backplateShape === "none";
+
+    // Add 3MF files
+    if (assemblyRef.current.face) {
+      const blob = export3MF(assemblyRef.current.face);
+      const buffer = await blob.arrayBuffer();
+      files["face_plate.3mf"] = new Uint8Array(buffer);
+    }
+    if (assemblyRef.current.back) {
+      const blob = export3MF(assemblyRef.current.back);
+      const buffer = await blob.arrayBuffer();
+      files["back_plate.3mf"] = new Uint8Array(buffer);
+    }
+    if (assemblyRef.current.cleat) {
+      const blob = export3MF(assemblyRef.current.cleat);
+      const buffer = await blob.arrayBuffer();
+      files["wall_cleat.3mf"] = new Uint8Array(buffer);
+    }
+    if (assemblyRef.current.diffuser) {
+      const blob = export3MF(assemblyRef.current.diffuser);
+      const buffer = await blob.arrayBuffer();
+      files["diffuser.3mf"] = new Uint8Array(buffer);
+    }
+
+    // Add individual letters for no-backplate
+    if (isNoBackplate && assemblyRef.current.letters.length > 0) {
+      for (const [i, letter] of assemblyRef.current.letters.entries()) {
+        const char = letter.userData?.char || `letter_${i}`;
+        const blob = export3MF(letter);
+        const buffer = await blob.arrayBuffer();
+        files[`${char}.3mf`] = new Uint8Array(buffer);
+      }
+    }
+
+    // Add drilling template if flush mount
+    if (isNoBackplate && params.noBackplateMountType === "flush" && mountingPoints.length > 0) {
+      const svg = generateDrillingSVG(mountingPoints, params);
+      files["drilling_template.svg"] = svg;
+    }
+
+    // Add README
+    files["README.txt"] = generateAssemblyInstructions(params, mountingPoints, dims, assemblyRef.current);
+
+    // Create and download bundle
+    const zipBlob = createZipBlob(files);
+    const url = URL.createObjectURL(zipBlob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `speak23d_${text}_bundle.zip`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }, [params, mountingPoints, dims]);
 
   const downloadSVGTemplate = useCallback(() => {
     const pts = assemblyRef.current.mountingPoints || mountingPoints;
@@ -1957,24 +2348,52 @@ export default function Speak23D() {
                 )}
                 {isNoBackplate && (
                   <>
-                    <div className="flex items-center justify-between bg-zinc-800 rounded-lg px-3 py-2">
-                      <div>
-                        <p className="text-sm font-medium text-zinc-200">Hidden Letter Mounting</p>
-                        <p className="text-xs text-zinc-500">Counterbored screw holes in letters</p>
+                    <div>
+                      <label className="block text-sm font-medium text-zinc-300 mb-2">Mounting Method</label>
+                      <div className="space-y-2">
+                        {([
+                          ["flush", "🔩 Flush Mount", "Screws hidden in counterbored holes on back of letters. Includes 1:1 drilling template."],
+                          ["standoff", "⚡ Standoff Mount", "Letters float 10-15mm off wall on hidden threaded rod/spacers. Premium look, halo shadow effect."],
+                          ["adhesive", "🏠 Adhesive/VHB", "No hardware, just flat back. For lightweight/indoor signs."],
+                        ] as [NoBackplateMountType, string, string][]).map(([method, label, desc]) => (
+                          <button
+                            key={method}
+                            onClick={() => updateParam("noBackplateMountType", method)}
+                            className={`w-full text-left p-3 rounded-lg border transition-colors ${
+                              params.noBackplateMountType === method
+                                ? "border-blue-500 bg-blue-900/30 text-blue-200"
+                                : "border-zinc-700 bg-zinc-800 text-zinc-300 hover:bg-zinc-700"
+                            }`}
+                          >
+                            <div className="font-medium text-sm mb-1">{label}</div>
+                            <div className="text-xs text-zinc-400">{desc}</div>
+                          </button>
+                        ))}
                       </div>
-                      <button onClick={() => updateParam("letterMounting", !params.letterMounting)}
-                        className={`relative w-11 h-6 rounded-full transition-colors ${params.letterMounting ? "bg-blue-500" : "bg-zinc-600"}`}>
-                        <span className={`absolute top-0.5 w-5 h-5 rounded-full bg-white transition-transform ${params.letterMounting ? "translate-x-5" : "translate-x-0.5"}`} />
-                      </button>
                     </div>
-                    <div className="flex items-center justify-between bg-zinc-800 rounded-lg px-3 py-2">
-                      <div>
-                        <p className="text-sm font-medium text-zinc-200">Show Mounting Points</p>
-                        <p className="text-xs text-zinc-500">Highlight holes in red in preview</p>
+
+                    {params.noBackplateMountType !== "adhesive" && (
+                      <div className="flex items-center justify-between bg-zinc-800 rounded-lg px-3 py-2">
+                        <div>
+                          <p className="text-sm font-medium text-zinc-200">Show Mounting Points</p>
+                          <p className="text-xs text-zinc-500">Highlight holes in red in preview</p>
+                        </div>
+                        <button onClick={() => updateParam("showMountingPoints", !params.showMountingPoints)}
+                          className={`relative w-11 h-6 rounded-full transition-colors ${params.showMountingPoints ? "bg-red-500" : "bg-zinc-600"}`}>
+                          <span className={`absolute top-0.5 w-5 h-5 rounded-full bg-white transition-transform ${params.showMountingPoints ? "translate-x-5" : "translate-x-0.5"}`} />
+                        </button>
                       </div>
-                      <button onClick={() => updateParam("showMountingPoints", !params.showMountingPoints)}
-                        className={`relative w-11 h-6 rounded-full transition-colors ${params.showMountingPoints ? "bg-red-500" : "bg-zinc-600"}`}>
-                        <span className={`absolute top-0.5 w-5 h-5 rounded-full bg-white transition-transform ${params.showMountingPoints ? "translate-x-5" : "translate-x-0.5"}`} />
+                    )}
+
+                    {/* Halo LED for floating letters */}
+                    <div className="flex items-center justify-between bg-gradient-to-r from-purple-900/30 to-pink-900/30 border border-purple-500/20 rounded-lg px-3 py-2">
+                      <div>
+                        <p className="text-sm font-medium text-purple-200">💫 Halo LED</p>
+                        <p className="text-xs text-purple-300">LED strip behind letters creates wall glow</p>
+                      </div>
+                      <button onClick={() => updateParam("haloLED", !params.haloLED)}
+                        className={`relative w-11 h-6 rounded-full transition-colors ${params.haloLED ? "bg-purple-500" : "bg-zinc-600"}`}>
+                        <span className={`absolute top-0.5 w-5 h-5 rounded-full bg-white transition-transform ${params.haloLED ? "translate-x-5" : "translate-x-0.5"}`} />
                       </button>
                     </div>
                   </>
@@ -2105,27 +2524,43 @@ export default function Speak23D() {
 
             {/* Downloads */}
             {hasGenerated && (assemblyRef.current.face || assemblyRef.current.letters.length > 0) && (
-              <div className="space-y-1.5">
+              <div className="space-y-2">
                 <h3 className="text-xs font-semibold text-zinc-400 uppercase tracking-wide">Downloads</h3>
-                {assemblyRef.current.face ? (
-                  <>
-                    <DownloadBtn label="Face Plate" onSTL={() => downloadFile(assemblyRef.current.face!, "face_plate", "stl")} on3MF={() => downloadFile(assemblyRef.current.face!, "face_plate", "3mf")} />
-                    <DownloadBtn label="Back Plate" onSTL={() => downloadFile(assemblyRef.current.back!, "back_plate", "stl")} on3MF={() => downloadFile(assemblyRef.current.back!, "back_plate", "3mf")} />
-                    {assemblyRef.current.cleat && <DownloadBtn label="Wall Cleat" onSTL={() => downloadFile(assemblyRef.current.cleat!, "wall_cleat", "stl")} on3MF={() => downloadFile(assemblyRef.current.cleat!, "wall_cleat", "3mf")} />}
-                    {assemblyRef.current.diffuser && <DownloadBtn label="Diffuser" onSTL={() => downloadFile(assemblyRef.current.diffuser!, "diffuser", "stl")} on3MF={() => downloadFile(assemblyRef.current.diffuser!, "diffuser", "3mf")} />}
-                  </>
-                ) : (
-                  assemblyRef.current.letters.map((l, i) => (
-                    <DownloadBtn key={i} label={`Letter ${l.userData?.char || i + 1}`} onSTL={() => downloadFile(l, `letter_${i}`, "stl")} on3MF={() => downloadFile(l, `letter_${i}`, "3mf")} />
-                  ))
-                )}
-                {isNoBackplate && params.letterMounting && mountingPoints.length > 0 && (
-                  <button onClick={downloadSVGTemplate}
-                    className="w-full flex items-center gap-2 bg-amber-900/30 border border-amber-500/20 rounded-lg px-3 py-2 text-sm text-amber-300 hover:bg-amber-900/50 transition-colors">
-                    <span>📐</span>
-                    <span className="flex-1 text-left">Download Drilling Template (SVG)</span>
-                  </button>
-                )}
+                
+                {/* Prominent Bambu Studio Bundle Button */}
+                <button
+                  onClick={downloadBambuStudioBundle}
+                  className="w-full flex items-center justify-center gap-3 py-4 rounded-lg font-bold text-white bg-gradient-to-r from-orange-600 to-red-600 hover:from-orange-500 hover:to-red-500 transition-all shadow-lg border-2 border-orange-400/50"
+                >
+                  <span className="text-2xl">🏭</span>
+                  <span>Export for Bambu Studio</span>
+                </button>
+                <p className="text-xs text-zinc-500 text-center">Complete bundle: all parts + instructions + template</p>
+                
+                <div className="border-t border-zinc-700 pt-2">
+                  <h4 className="text-xs font-medium text-zinc-500 mb-1.5">Individual Files</h4>
+                  {assemblyRef.current.face ? (
+                    <>
+                      <DownloadBtn label="Face Plate" onSTL={() => downloadFile(assemblyRef.current.face!, "face_plate", "stl")} on3MF={() => downloadFile(assemblyRef.current.face!, "face_plate", "3mf")} />
+                      <DownloadBtn label="Back Plate" onSTL={() => downloadFile(assemblyRef.current.back!, "back_plate", "stl")} on3MF={() => downloadFile(assemblyRef.current.back!, "back_plate", "3mf")} />
+                      {assemblyRef.current.cleat && <DownloadBtn label="Wall Cleat" onSTL={() => downloadFile(assemblyRef.current.cleat!, "wall_cleat", "stl")} on3MF={() => downloadFile(assemblyRef.current.cleat!, "wall_cleat", "3mf")} />}
+                      {assemblyRef.current.diffuser && <DownloadBtn label="Diffuser" onSTL={() => downloadFile(assemblyRef.current.diffuser!, "diffuser", "stl")} on3MF={() => downloadFile(assemblyRef.current.diffuser!, "diffuser", "3mf")} />}
+                    </>
+                  ) : (
+                    <div className="space-y-1">
+                      {assemblyRef.current.letters.map((l, i) => (
+                        <DownloadBtn key={i} label={`Letter ${l.userData?.char || i + 1}`} onSTL={() => downloadFile(l, `letter_${i}`, "stl")} on3MF={() => downloadFile(l, `letter_${i}`, "3mf")} />
+                      ))}
+                    </div>
+                  )}
+                  {isNoBackplate && params.noBackplateMountType === "flush" && mountingPoints.length > 0 && (
+                    <button onClick={downloadSVGTemplate}
+                      className="w-full flex items-center gap-2 bg-amber-900/30 border border-amber-500/20 rounded-lg px-3 py-2 text-sm text-amber-300 hover:bg-amber-900/50 transition-colors mt-1">
+                      <span>📐</span>
+                      <span className="flex-1 text-left">Drilling Template (SVG)</span>
+                    </button>
+                  )}
+                </div>
               </div>
             )}
 

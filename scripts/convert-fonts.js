@@ -106,10 +106,16 @@ async function main() {
       category: 'Classic Serif'
     },
     {
-      name: 'Roboto Slab Bold', 
-      url: 'https://github.com/google/fonts/raw/main/ofl/robotoslab/RobotoSlab%5Bwght%5D.ttf',
-      file: 'roboto_slab_bold',
-      category: 'Slab Serif'
+      name: 'Roboto Bold', 
+      url: 'https://fonts.gstatic.com/s/roboto/v30/KFOlCnqEu92Fr1MmWUlfBBc4.woff2',
+      file: 'roboto_bold',
+      category: 'Sans Serif'
+    },
+    {
+      name: 'Great Vibes',
+      url: 'https://github.com/google/fonts/raw/main/ofl/greatvibes/GreatVibes-Regular.ttf',
+      file: 'great_vibes',
+      category: 'Connected Script'
     },
     {
       name: 'Black Ops One',
