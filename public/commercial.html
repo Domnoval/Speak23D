@@ -3,150 +3,171 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>SPEAK23D — Commercial</title>
+<title>SPEAK23D</title>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700;900&display=swap" rel="stylesheet">
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
-:root{--gold:#c9a84c;--dark:#0a0a0a;--t:30s}
-body{background:var(--dark);color:#fff;font-family:'Inter',sans-serif;overflow:hidden;height:100vh;width:100vw}
-.scene{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;flex-direction:column;opacity:0;pointer-events:none;text-align:center;padding:1.5rem}
-
-/* utility */
-@keyframes fadeIn{0%{opacity:0;transform:scale(.95)}100%{opacity:1;transform:scale(1)}}
-@keyframes fadeOut{0%{opacity:1}100%{opacity:0}}
-@keyframes typing{0%{width:0}100%{width:100%}}
-@keyframes glow-on{0%{text-shadow:0 0 0 transparent}100%{text-shadow:0 0 30px var(--gold),0 0 60px var(--gold),0 0 90px rgba(201,168,76,.4)}}
-@keyframes pulse{0%,100%{opacity:.7}50%{opacity:1}}
-@keyframes download-bounce{0%,100%{transform:translateY(0)}50%{transform:translateY(8px)}}
-@keyframes progress{0%{width:0}100%{width:100%}}
-@keyframes blink{0%,100%{border-color:var(--gold)}50%{border-color:transparent}}
-
-/* Scene 1: 0-3s — SPEAK23D title */
-#s1{animation:fadeIn .8s .3s both,fadeOut .5s 2.8s both}
-#s1 h1{font-size:clamp(3rem,12vw,8rem);font-weight:900;color:var(--gold);letter-spacing:.15em}
-
-/* Scene 2: 3-5s — Tagline */
-#s2{animation:fadeIn .6s 3s both,fadeOut .4s 4.8s both}
-#s2 p{font-size:clamp(1.2rem,4vw,2.2rem);font-weight:300;color:#ddd;letter-spacing:.08em}
-
-/* Scene 3: 5-8s — Typing mockup */
-#s3{animation:fadeIn .5s 5s both,fadeOut .4s 7.8s both}
-.mock-editor{background:#111;border:1px solid #333;border-radius:12px;padding:1.5rem 2rem;width:min(90vw,500px);text-align:left}
-.mock-editor .label{font-size:.75rem;color:#666;margin-bottom:.5rem;text-transform:uppercase;letter-spacing:.1em}
-.mock-editor .typed{font-size:clamp(2rem,7vw,3.5rem);font-weight:700;color:var(--gold);overflow:hidden;white-space:nowrap;border-right:3px solid var(--gold);animation:typing 1.5s 5.5s steps(5) both,blink .6s step-end infinite}
-.mock-3d{margin-top:1.5rem;perspective:400px}
-.mock-3d .text3d{font-size:clamp(2rem,7vw,3.5rem);font-weight:900;color:var(--gold);transform:rotateX(15deg) rotateY(-10deg);text-shadow:1px 1px 0 #a8843a,2px 2px 0 #8a6c2e,3px 3px 0 #6d5523,4px 4px 0 #503e19,5px 5px 10px rgba(0,0,0,.6);animation:fadeIn .8s 6.5s both}
-
-/* Scene 4: 8-11s — Feature cuts */
-#s4a{animation:fadeIn .4s 8s both,fadeOut .3s 8.9s both}
-#s4b{animation:fadeIn .4s 9.2s both,fadeOut .3s 10.1s both}
-#s4c{animation:fadeIn .4s 10.4s both,fadeOut .3s 10.9s both}
-.feat{font-size:clamp(1.8rem,6vw,3.5rem);font-weight:700;color:var(--gold)}
-.feat-sub{font-size:clamp(.9rem,2.5vw,1.2rem);color:#888;margin-top:.5rem}
-.feat-icon{font-size:3rem;margin-bottom:.5rem}
-
-/* Scene 5: 11-15s — House number on wall */
-#s5{animation:fadeIn .6s 11s both,fadeOut .5s 14.5s both}
-.brick-wall{width:min(90vw,500px);height:min(55vw,300px);background:repeating-linear-gradient(0deg,#000 0px,#000 2px,transparent 2px,transparent 40px),repeating-linear-gradient(90deg,#8b4513 0px,#8b4513 80px,#5a2d0c 80px,#5a2d0c 82px);background-color:#7a3b10;border-radius:8px;display:flex;align-items:center;justify-content:center;position:relative}
-.house-num{font-size:clamp(4rem,15vw,7rem);font-weight:900;color:#ddd;letter-spacing:.1em;animation:glow-on 1.5s 12.5s both;position:relative}
-.wall-label{position:absolute;bottom:.75rem;right:1rem;font-size:.7rem;color:rgba(255,255,255,.4);text-transform:uppercase;letter-spacing:.1em}
-
-/* Scene 6: 15-19s — Export */
-#s6{animation:fadeIn .5s 15s both,fadeOut .4s 18.5s both}
-.export-flow{display:flex;align-items:center;gap:1.5rem;flex-wrap:wrap;justify-content:center}
-.export-box{background:#151515;border:1px solid #333;border-radius:10px;padding:1.2rem 1.5rem;text-align:center}
-.export-box .ext{font-size:1.5rem;font-weight:700;color:var(--gold)}
-.export-box .desc{font-size:.7rem;color:#666;margin-top:.3rem}
-.arrow-down{font-size:2rem;color:var(--gold);animation:download-bounce 1s infinite}
-.printer-name{font-size:clamp(1rem,3vw,1.5rem);font-weight:600;color:#ccc;margin-top:1.2rem}
-
-/* Scene 7: 19-23s — Share link */
-#s7{animation:fadeIn .5s 19s both,fadeOut .4s 22.5s both}
-#s7 h2{font-size:clamp(1.3rem,4vw,2rem);font-weight:600;color:#eee;max-width:500px;line-height:1.4}
-.url-bar{background:#1a1a1a;border:1px solid #333;border-radius:20px;padding:.6rem 1.2rem;display:inline-flex;align-items:center;gap:.6rem;margin-top:1.2rem;font-size:clamp(.7rem,2vw,1rem)}
-.url-bar .dot{width:8px;height:8px;border-radius:50%;background:#444}
-.url-bar .url{color:var(--gold);font-weight:500}
-
-/* Scene 8: 23-27s — No install */
-#s8{animation:fadeIn .5s 23s both,fadeOut .4s 26.5s both}
-#s8 h2{font-size:clamp(1.5rem,5vw,2.8rem);font-weight:700;color:#fff;line-height:1.3}
-#s8 h2 span{color:var(--gold)}
-
-/* Scene 9: 27-30s — CTA */
-#s9{animation:fadeIn .6s 27s both}
-#s9 h1{font-size:clamp(2rem,8vw,4.5rem);font-weight:900;color:var(--gold);letter-spacing:.05em}
-#s9 p{font-size:clamp(1rem,3vw,1.5rem);color:#888;margin-top:.8rem;font-weight:300;font-style:italic}
-.replay{opacity:0;animation:fadeIn .5s 30.5s both;margin-top:2rem;color:#555;font-size:.85rem;cursor:pointer;border:1px solid #333;padding:.5rem 1.2rem;border-radius:20px;background:transparent;font-family:inherit}
-.replay:hover{color:var(--gold);border-color:var(--gold)}
-
+html,body{width:100%;height:100%;overflow:hidden;background:#000;font-family:'Inter',sans-serif;color:#fff}
+.scene{position:fixed;inset:0;display:none;opacity:0;flex-direction:column;align-items:center;justify-content:center;z-index:1;transition:opacity .4s ease;padding:2rem;text-align:center}
+/* Film grain */
+.grain{position:fixed;inset:0;z-index:90;pointer-events:none;opacity:.04;background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E")}
 /* Progress bar */
-.progress{position:fixed;bottom:0;left:0;height:3px;background:var(--gold);animation:progress 30s linear both;z-index:99}
+.progress{position:fixed;bottom:0;left:0;height:3px;background:linear-gradient(90deg,#b8860b,#ffd700);z-index:95;width:0;transition:width .1s linear}
+/* Gold */
+.gold{color:#ffd700}
+.gold-glow{color:#ffd700;text-shadow:0 0 40px rgba(255,215,0,.3)}
+
+/* Scene 1 */
+.s1-title{font-size:clamp(4rem,15vw,10rem);font-weight:900;letter-spacing:-.04em;color:#ffd700;text-shadow:0 0 60px rgba(255,215,0,.2)}
+
+/* Scene 2 */
+.s2-text{font-size:clamp(1.5rem,5vw,3rem);font-weight:300;letter-spacing:.05em;opacity:.9}
+
+/* Scene 3 */
+.s3-input{background:rgba(255,255,255,.06);border:1px solid rgba(255,215,0,.3);border-radius:12px;padding:1rem 1.5rem;font-size:clamp(1rem,3vw,1.5rem);color:#ffd700;font-family:'Inter',sans-serif;width:min(90%,500px);text-align:left;margin-bottom:2rem;position:relative}
+.s3-cursor{display:inline-block;width:2px;height:1.2em;background:#ffd700;vertical-align:text-bottom;animation:blink 1s step-end infinite}
+@keyframes blink{50%{opacity:0}}
+.s3-3d{font-size:clamp(2rem,7vw,4rem);font-weight:900;color:#ffd700;transform:perspective(600px) rotateX(10deg);text-shadow:0 4px 0 #b8860b,0 8px 20px rgba(0,0,0,.5)}
+
+/* Scene 4 */
+.s4-line{font-size:clamp(1.2rem,4vw,2.2rem);font-weight:600;letter-spacing:.02em}
+.s4-line span{opacity:.3;transition:opacity .4s ease,color .4s ease}
+.s4-line span.lit{opacity:1;color:#ffd700}
+
+/* Scene 5 */
+.s5-num{font-size:clamp(5rem,18vw,12rem);font-weight:900;color:#ffd700;text-shadow:0 0 80px rgba(255,215,0,.25),0 0 160px rgba(255,215,0,.1)}
+.s5-sub{font-size:clamp(1rem,3vw,1.5rem);font-weight:300;opacity:.7;margin-top:1rem}
+
+/* Scene 6 */
+.s6-flow{font-size:clamp(1.2rem,4vw,2.2rem);font-weight:600;letter-spacing:.02em}
+.s6-flow .arrow{color:#ffd700;margin:0 .5em}
+
+/* Scene 7 */
+.s7-text{font-size:clamp(1.3rem,4vw,2.2rem);font-weight:300;margin-bottom:2rem}
+.s7-bar{background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);border-radius:999px;padding:.7rem 1.5rem;font-size:clamp(.8rem,2.5vw,1.1rem);color:rgba(255,255,255,.5);width:min(90%,500px);display:flex;align-items:center;gap:.5rem}
+.s7-lock{opacity:.4}
+
+/* Scene 8 */
+.s8-line{font-size:clamp(1.5rem,5vw,3rem);font-weight:300;opacity:0;transition:opacity .5s ease;margin:.3em 0}
+
+/* Scene 9 */
+.s9-url{font-size:clamp(1.5rem,5vw,2.5rem);font-weight:700;color:#ffd700;margin-bottom:1rem}
+.s9-sub{font-size:clamp(1rem,3vw,1.5rem);font-weight:300;opacity:.7;margin-bottom:2rem}
+.s9-btn{background:none;border:1px solid rgba(255,215,0,.4);color:#ffd700;padding:.8rem 2rem;border-radius:999px;font-size:1rem;font-family:'Inter',sans-serif;cursor:pointer;transition:all .3s}
+.s9-btn:hover{background:rgba(255,215,0,.1);border-color:#ffd700}
 </style>
 </head>
 <body>
+<div class="grain"></div>
+<div class="progress" id="progress"></div>
 
-<div class="progress"></div>
-
-<!-- 0-3s -->
-<div class="scene" id="s1"><h1>SPEAK23D</h1></div>
-
-<!-- 3-5s -->
-<div class="scene" id="s2"><p>Type it. Print it. Mount it.</p></div>
-
-<!-- 5-8s -->
-<div class="scene" id="s3">
-  <div class="mock-editor">
-    <div class="label">Enter your text</div>
-    <div class="typed">SMITH</div>
-  </div>
-  <div class="mock-3d"><div class="text3d">SMITH</div></div>
+<div class="scene" id="s0"><div class="s1-title">SPEAK23D</div></div>
+<div class="scene" id="s1"><div class="s2-text">Type it. Print it. Mount it.</div></div>
+<div class="scene" id="s2">
+  <div class="s3-input"><span id="typeTarget"></span><span class="s3-cursor"></span></div>
+  <div class="s3-3d" id="s3text"></div>
 </div>
-
-<!-- 8-11s features -->
-<div class="scene" id="s4a"><div class="feat-icon">🔤</div><div class="feat">7 Fonts</div><div class="feat-sub">Modern · Serif · Stencil · Art Deco · Script · Slab</div></div>
-<div class="scene" id="s4b"><div class="feat-icon">💡</div><div class="feat">LED Glow Preview</div><div class="feat-sub">See the light before you print</div></div>
-<div class="scene" id="s4c"><div class="feat-icon">🌙</div><div class="feat">Night Mode</div><div class="feat-sub">Day & night simulation</div></div>
-
-<!-- 11-15s -->
-<div class="scene" id="s5">
-  <div class="brick-wall">
-    <div class="house-num">42</div>
-    <div class="wall-label">Environment Preview</div>
-  </div>
+<div class="scene" id="s3"><div class="s4-line"><span id="f1">7 Fonts</span> · <span id="f2">LED Preview</span> · <span id="f3">Night Mode</span></div></div>
+<div class="scene" id="s4">
+  <div class="s5-num">42</div>
+  <div class="s5-sub">See it installed before you print</div>
 </div>
-
-<!-- 15-19s -->
+<div class="scene" id="s5"><div class="s6-flow">.STL <span class="arrow">→</span> .3MF <span class="arrow">→</span> Bambu X1 Carbon</div></div>
 <div class="scene" id="s6">
-  <div class="export-flow">
-    <div class="export-box"><div class="ext">.STL</div><div class="desc">Universal</div></div>
-    <div class="export-box"><div class="ext">.3MF</div><div class="desc">Multi-color</div></div>
-  </div>
-  <div class="arrow-down">⬇</div>
-  <div class="printer-name">Print on Bambu X1 Carbon</div>
+  <div class="s7-text">Share a link. They see what you see.</div>
+  <div class="s7-bar"><span class="s7-lock">🔒</span> speak23d.vercel.app/s/a7x9f</div>
 </div>
-
-<!-- 19-23s -->
 <div class="scene" id="s7">
-  <h2>Share a link.<br>Client sees exactly what you designed.</h2>
-  <div class="url-bar">
-    <div class="dot"></div>
-    <div class="dot"></div>
-    <div class="dot"></div>
-    <span class="url">speak23d.vercel.app/s/abc123</span>
-  </div>
+  <div class="s8-line" id="ni1">No install.</div>
+  <div class="s8-line" id="ni2">No software.</div>
+  <div class="s8-line" id="ni3">Just a browser.</div>
 </div>
-
-<!-- 23-27s -->
 <div class="scene" id="s8">
-  <h2>No install.<br>No software.<br>Just a <span>browser</span>.</h2>
+  <div class="s9-url">speak23d.vercel.app</div>
+  <div class="s9-sub">Built for builders.</div>
+  <button class="s9-btn" onclick="replay()">▶ Watch Again</button>
 </div>
 
-<!-- 27-30s -->
-<div class="scene" id="s9">
-  <h1>speak23d.vercel.app</h1>
-  <p>Built for builders.</p>
-  <button class="replay" onclick="location.reload()">↻ Tap to replay</button>
-</div>
+<script>
+const scenes=document.querySelectorAll('.scene');
+const progress=document.getElementById('progress');
+const FADE=400,GAP=500,TOTAL=35500;
+let startTime=0,progressRAF=0,timeouts=[];
 
+const timeline=[
+  {id:0,start:0,dur:4000},
+  {id:1,start:4500,dur:2000},
+  {id:2,start:7000,dur:4500},
+  {id:3,start:12000,dur:3000},
+  {id:4,start:15500,dur:4000},
+  {id:5,start:20000,dur:3500},
+  {id:6,start:24000,dur:3500},
+  {id:7,start:28000,dur:3000},
+  {id:8,start:31500,dur:4000}
+];
+
+function showScene(i){
+  scenes[i].style.display='flex';
+  requestAnimationFrame(()=>requestAnimationFrame(()=>{scenes[i].style.opacity='1'}));
+  // scene-specific animations
+  if(i===2)typeAnimation();
+  if(i===3)featureHighlight();
+  if(i===7)noInstallReveal();
+}
+function hideScene(i){
+  scenes[i].style.opacity='0';
+  setTimeout(()=>{scenes[i].style.display='none'},FADE);
+}
+
+function typeAnimation(){
+  const word="HELLO";const el=document.getElementById('typeTarget');const t3=document.getElementById('s3text');
+  el.textContent='';t3.textContent='';
+  word.split('').forEach((ch,i)=>{
+    timeouts.push(setTimeout(()=>{el.textContent+=ch;t3.textContent=el.textContent},i*350));
+  });
+}
+function featureHighlight(){
+  ['f1','f2','f3'].forEach((id,i)=>{
+    timeouts.push(setTimeout(()=>{document.getElementById(id).classList.add('lit')},i*700));
+  });
+}
+function noInstallReveal(){
+  ['ni1','ni2','ni3'].forEach((id,i)=>{
+    timeouts.push(setTimeout(()=>{document.getElementById(id).style.opacity='1'},i*800));
+  });
+}
+
+function updateProgress(){
+  const elapsed=Date.now()-startTime;
+  const pct=Math.min(elapsed/TOTAL*100,100);
+  progress.style.width=pct+'%';
+  if(pct<100)progressRAF=requestAnimationFrame(updateProgress);
+}
+
+function run(){
+  // reset
+  timeouts.forEach(clearTimeout);timeouts=[];
+  cancelAnimationFrame(progressRAF);
+  scenes.forEach(s=>{s.style.display='none';s.style.opacity='0'});
+  progress.style.width='0';
+  ['f1','f2','f3'].forEach(id=>{const e=document.getElementById(id);if(e)e.classList.remove('lit')});
+  ['ni1','ni2','ni3'].forEach(id=>{const e=document.getElementById(id);if(e)e.style.opacity='0'});
+  document.getElementById('typeTarget').textContent='';
+  document.getElementById('s3text').textContent='';
+
+  startTime=Date.now();
+  updateProgress();
+
+  timeline.forEach((entry,idx)=>{
+    timeouts.push(setTimeout(()=>showScene(entry.id),entry.start));
+    if(idx<timeline.length-1){
+      timeouts.push(setTimeout(()=>hideScene(entry.id),entry.start+entry.dur));
+    }
+  });
+}
+
+function replay(){run()}
+run();
+</script>
 </body>
 </html>
