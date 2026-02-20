@@ -9,20 +9,77 @@ import { STLExporter } from "three/examples/jsm/exporters/STLExporter.js";
 import { CSG } from "three-csg-ts";
 
 // ─── Constants ────────────────────────────────────────────────────────────
-const MM = 0.001; // 1mm in Three.js units (meters)
-const BUILD_MAX = { x: 256, y: 256, z: 256 }; // Bambu X1 Carbon
+const MM = 0.001;
+const BUILD_MAX = { x: 256, y: 256, z: 256 };
 
-const FONT_URLS: Record<string, string> = {
-  montserrat: "https://cdn.jsdelivr.net/npm/@openfonts/montserrat_all@1.44.2/files/montserrat-all-700.woff",
-  helvetiker: "/fonts/helvetiker_bold.typeface.json",
-};
+// ─── Font Definitions ─────────────────────────────────────────────────────
+interface FontDef {
+  id: string;
+  name: string;
+  category: string;
+  url: string;
+  description: string;
+}
+
+const FONT_DEFS: FontDef[] = [
+  {
+    id: "helvetiker",
+    name: "Helvetiker Bold",
+    category: "Modern Sans",
+    url: "https://cdn.jsdelivr.net/npm/three@0.175.0/examples/fonts/helvetiker_bold.typeface.json",
+    description: "Clean, contemporary sans-serif",
+  },
+  {
+    id: "optimer",
+    name: "Optimer Bold",
+    category: "Classic Serif",
+    url: "/fonts/optimer_bold.typeface.json",
+    description: "Elegant traditional serif",
+  },
+  {
+    id: "playfair",
+    name: "Playfair Display",
+    category: "Classic Serif",
+    url: "/fonts/playfair_display_bold.typeface.json",
+    description: "High-contrast editorial serif",
+  },
+  {
+    id: "black_ops",
+    name: "Black Ops One",
+    category: "Stencil / Industrial",
+    url: "/fonts/black_ops_one.typeface.json",
+    description: "Military stencil look",
+  },
+  {
+    id: "poiret",
+    name: "Poiret One",
+    category: "Art Deco",
+    url: "/fonts/poiret_one.typeface.json",
+    description: "1920s geometric elegance",
+  },
+  {
+    id: "pacifico",
+    name: "Pacifico",
+    category: "Script / Cursive",
+    url: "/fonts/pacifico.typeface.json",
+    description: "Thick brush script — great for names",
+  },
+  {
+    id: "alfa_slab",
+    name: "Alfa Slab One",
+    category: "Slab Serif",
+    url: "/fonts/alfa_slab_one.typeface.json",
+    description: "Bold slab serif, readable from distance",
+  },
+];
 
 // ─── Types ────────────────────────────────────────────────────────────────
 interface Params {
   text: string;
-  font: string;
+  fontId: string;
   heightMM: number;
   depthMM: number;
+  letterSpacing: number; // multiplier, 1.0 = default
   housing: boolean;
   ledType: "strip_5v" | "strip_12v" | "cob";
   mount: "french_cleat" | "keyhole" | "flat";
@@ -32,9 +89,10 @@ interface Params {
 
 const DEFAULT_PARAMS: Params = {
   text: "1234",
-  font: "helvetiker",
+  fontId: "helvetiker",
   heightMM: 80,
   depthMM: 12,
+  letterSpacing: 1.0,
   housing: true,
   ledType: "strip_5v",
   mount: "french_cleat",
@@ -100,10 +158,10 @@ function createLetterMeshes(font: Font, params: Params): THREE.Mesh[] {
 
   const h = params.heightMM * MM;
   const d = params.depthMM * MM;
+  const spacing = params.letterSpacing;
   const meshes: THREE.Mesh[] = [];
   const widths: number[] = [];
 
-  // Measure each character
   for (const ch of text) {
     if (ch === " ") {
       widths.push(h * 0.3);
@@ -122,7 +180,7 @@ function createLetterMeshes(font: Font, params: Params): THREE.Mesh[] {
     geo.dispose();
   }
 
-  const gap = h * 0.03;
+  const gap = h * 0.03 * spacing;
   let cursor = 0;
   const totalW = widths.reduce((a, b) => a + b, 0) + gap * (text.length - 1);
   const offsetX = -totalW / 2;
@@ -130,7 +188,7 @@ function createLetterMeshes(font: Font, params: Params): THREE.Mesh[] {
   for (let i = 0; i < text.length; i++) {
     const ch = text[i];
     if (ch === " ") {
-      cursor += widths[i] + gap;
+      cursor += widths[i] * spacing + gap;
       continue;
     }
     const geo = new TextGeometry(ch, {
@@ -142,7 +200,6 @@ function createLetterMeshes(font: Font, params: Params): THREE.Mesh[] {
     });
     geo.computeBoundingBox();
     const bb = geo.boundingBox!;
-    // Center vertically
     geo.translate(-bb.min.x, -(bb.min.y + bb.max.y) / 2, -bb.min.z);
     const mesh = makeMesh(geo, 0xcccccc);
     mesh.position.set(offsetX + cursor, 0, 0);
@@ -166,7 +223,6 @@ function createFacePlate(letters: THREE.Mesh[], params: Params): THREE.Mesh {
   plate.position.set(cx, cy, -thick / 2);
   plate.updateMatrixWorld(true);
 
-  // Union letters with plate
   for (const letter of letters) {
     const clone = letter.clone();
     clone.updateMatrixWorld(true);
@@ -175,7 +231,6 @@ function createFacePlate(letters: THREE.Mesh[], params: Params): THREE.Mesh {
     plate.updateMatrixWorld(true);
   }
 
-  // Snap-fit tabs
   const tabR = 1.5 * MM;
   const tabL = 2 * MM;
   const tabPositions = [
@@ -185,11 +240,6 @@ function createFacePlate(letters: THREE.Mesh[], params: Params): THREE.Mesh {
     [cx, cy + h * 0.35, -thick - tabL / 2],
   ];
   for (const [tx, ty, tz] of tabPositions) {
-    const tab = cylMesh(tabR, tabL, 0xdddddd);
-    tab.rotation.set(Math.PI / 2, 0, 0);
-    tab.position.set(tx, ty, tz);
-    tab.updateMatrixWorld(true);
-    // Rotate cylinder to align with Z axis
     const tab2 = cylMesh(tabR, tabL, 0xdddddd);
     tab2.position.set(tx, ty, tz);
     tab2.updateMatrixWorld(true);
@@ -219,12 +269,10 @@ function createBackPlate(letters: THREE.Mesh[], params: Params): THREE.Mesh {
   const backFront = faceBack - 2 * MM;
   const backZ = backFront - plateThick / 2;
 
-  // Base plate
   let back = boxMesh(outerW, outerH, plateThick, 0x666666);
   back.position.set(cx, cy, backZ);
   back.updateMatrixWorld(true);
 
-  // Rim walls
   const rimZ = backFront + rimH / 2;
   let rimOuter = boxMesh(outerW, outerH, rimH, 0x666666);
   rimOuter.position.set(cx, cy, rimZ);
@@ -237,7 +285,6 @@ function createBackPlate(letters: THREE.Mesh[], params: Params): THREE.Mesh {
   back = safeCSG(back, rimOuter, "union");
   back.updateMatrixWorld(true);
 
-  // LED channels
   const [ledW, ledD] = LED_CHANNELS[params.ledType] || [12, 4];
   for (const letter of letters) {
     letter.geometry.computeBoundingBox();
@@ -254,7 +301,6 @@ function createBackPlate(letters: THREE.Mesh[], params: Params): THREE.Mesh {
     back.updateMatrixWorld(true);
   }
 
-  // Wire routing channel
   const wireSize = 4 * MM;
   const wireZ = backFront + wireSize / 2 + 0.0001;
   const wire = boxMesh(innerW * 0.9, wireSize, wireSize, 0x666666);
@@ -263,7 +309,6 @@ function createBackPlate(letters: THREE.Mesh[], params: Params): THREE.Mesh {
   back = safeCSG(back, wire, "subtract");
   back.updateMatrixWorld(true);
 
-  // Cable gland hole
   const glandR = 4 * MM;
   const glandX = cx + outerW / 2;
   const glandZ = backFront + rimH * 0.3;
@@ -274,7 +319,6 @@ function createBackPlate(letters: THREE.Mesh[], params: Params): THREE.Mesh {
   back = safeCSG(back, gland, "subtract");
   back.updateMatrixWorld(true);
 
-  // French cleat
   if (params.mount === "french_cleat") {
     const cleatW = outerW * 0.6;
     const cleatH = 10 * MM;
@@ -283,7 +327,6 @@ function createBackPlate(letters: THREE.Mesh[], params: Params): THREE.Mesh {
     let cleat = boxMesh(cleatW, cleatH, cleatD, 0x666666);
     cleat.position.set(cx, cy, cleatZ);
     cleat.updateMatrixWorld(true);
-    // 45-degree cut
     const cutter = boxMesh(cleatW + 0.001, cleatH, cleatD, 0x666666);
     cutter.position.set(cx, cy + cleatH * 0.4, cleatZ);
     cutter.rotation.set(Math.PI / 4, 0, 0);
@@ -324,7 +367,6 @@ function createWallCleat(letters: THREE.Mesh[], params: Params): THREE.Mesh {
   base = safeCSG(base, cleat, "union");
   base.updateMatrixWorld(true);
 
-  // Screw holes
   for (const yOff of [-mountH * 0.3, mountH * 0.3]) {
     const hole = cylMesh(2.5 * MM, mountThick * 3, 0x999999);
     hole.position.set(0, yOff, 0);
@@ -352,7 +394,6 @@ function createDiffuser(letters: THREE.Mesh[]): THREE.Mesh {
 
 function exportSTL(mesh: THREE.Mesh): Blob {
   const exporter = new STLExporter();
-  // Scale to mm (Three.js is in meters)
   const clone = mesh.clone();
   clone.scale.multiplyScalar(1000);
   clone.updateMatrixWorld(true);
@@ -361,7 +402,6 @@ function exportSTL(mesh: THREE.Mesh): Blob {
 }
 
 function export3MF(mesh: THREE.Mesh): Blob {
-  // Scale geometry to mm
   const clone = mesh.clone();
   clone.scale.multiplyScalar(1000);
   clone.updateMatrixWorld(true);
@@ -371,7 +411,6 @@ function export3MF(mesh: THREE.Mesh): Blob {
   const pos = geo.getAttribute("position");
   const idx = geo.index;
 
-  // Deduplicate vertices
   const vertMap = new Map<string, number>();
   const verts: number[][] = [];
   const tris: number[][] = [];
@@ -396,7 +435,7 @@ function export3MF(mesh: THREE.Mesh): Blob {
     tris.push([getVert(a), getVert(b), getVert(c)]);
   }
 
-  let model = `<?xml version="1.0" encoding="UTF-8"?>
+  const model = `<?xml version="1.0" encoding="UTF-8"?>
 <model unit="millimeter" xmlns="http://schemas.microsoft.com/3dmanufacturing/core/2015/02">
   <resources>
     <object id="1" type="model">
@@ -426,9 +465,6 @@ ${tris.map((t) => `          <triangle v1="${t[0]}" v2="${t[1]}" v3="${t[2]}" />
   <Relationship Target="/3D/3dmodel.model" Id="rel0" Type="http://schemas.microsoft.com/3dmanufacturing/2013/01/3dmodel" />
 </Relationships>`;
 
-  // Build ZIP manually using JSZip-like approach, or use a simpler method
-  // For now, we'll use the fflate library approach or just provide STL
-  // Actually, let's build a minimal ZIP
   return createZipBlob({
     "[Content_Types].xml": contentTypes,
     "_rels/.rels": rels,
@@ -437,7 +473,6 @@ ${tris.map((t) => `          <triangle v1="${t[0]}" v2="${t[1]}" v3="${t[2]}" />
 }
 
 function createZipBlob(files: Record<string, string>): Blob {
-  // Minimal ZIP implementation
   const entries: { name: Uint8Array; data: Uint8Array; offset: number }[] = [];
   const parts: Uint8Array[] = [];
   let offset = 0;
@@ -448,17 +483,17 @@ function createZipBlob(files: Record<string, string>): Blob {
 
     const localHeader = new Uint8Array(30 + nameBytes.length);
     const dv = new DataView(localHeader.buffer);
-    dv.setUint32(0, 0x04034b50, true); // local file header sig
-    dv.setUint16(4, 20, true); // version needed
-    dv.setUint16(6, 0, true); // flags
-    dv.setUint16(8, 0, true); // compression (none)
-    dv.setUint16(10, 0, true); // mod time
-    dv.setUint16(12, 0, true); // mod date
-    dv.setUint32(14, crc32(dataBytes), true); // crc32
-    dv.setUint32(18, dataBytes.length, true); // compressed size
-    dv.setUint32(22, dataBytes.length, true); // uncompressed size
-    dv.setUint16(26, nameBytes.length, true); // name length
-    dv.setUint16(28, 0, true); // extra length
+    dv.setUint32(0, 0x04034b50, true);
+    dv.setUint16(4, 20, true);
+    dv.setUint16(6, 0, true);
+    dv.setUint16(8, 0, true);
+    dv.setUint16(10, 0, true);
+    dv.setUint16(12, 0, true);
+    dv.setUint32(14, crc32(dataBytes), true);
+    dv.setUint32(18, dataBytes.length, true);
+    dv.setUint32(22, dataBytes.length, true);
+    dv.setUint16(26, nameBytes.length, true);
+    dv.setUint16(28, 0, true);
     localHeader.set(nameBytes, 30);
 
     entries.push({ name: nameBytes, data: dataBytes, offset });
@@ -467,7 +502,6 @@ function createZipBlob(files: Record<string, string>): Blob {
     offset += localHeader.length + dataBytes.length;
   }
 
-  // Central directory
   const cdParts: Uint8Array[] = [];
   let cdSize = 0;
   for (const entry of entries) {
@@ -495,7 +529,6 @@ function createZipBlob(files: Record<string, string>): Blob {
     cdSize += cd.length;
   }
 
-  // End of central directory
   const eocd = new Uint8Array(22);
   const dv = new DataView(eocd.buffer);
   dv.setUint32(0, 0x06054b50, true);
@@ -531,7 +564,7 @@ export default function Speak23D() {
   const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
   const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
   const controlsRef = useRef<OrbitControls | null>(null);
-  const fontRef = useRef<Font | null>(null);
+  const fontsRef = useRef<Map<string, Font>>(new Map());
   const assemblyRef = useRef<{
     face?: THREE.Mesh;
     back?: THREE.Mesh;
@@ -542,9 +575,41 @@ export default function Speak23D() {
 
   const [params, setParams] = useState<Params>(DEFAULT_PARAMS);
   const [generating, setGenerating] = useState(false);
-  const [fontLoaded, setFontLoaded] = useState(false);
+  const [fontsLoaded, setFontsLoaded] = useState<Set<string>>(new Set());
+  const [loadingFont, setLoadingFont] = useState<string | null>(null);
   const [dims, setDims] = useState<string>("");
-  const [status, setStatus] = useState("Loading font...");
+  const [status, setStatus] = useState("Loading fonts...");
+
+  // Load a font on demand
+  const loadFont = useCallback((fontId: string): Promise<Font> => {
+    return new Promise((resolve, reject) => {
+      if (fontsRef.current.has(fontId)) {
+        resolve(fontsRef.current.get(fontId)!);
+        return;
+      }
+      const def = FONT_DEFS.find((f) => f.id === fontId);
+      if (!def) {
+        reject(new Error(`Unknown font: ${fontId}`));
+        return;
+      }
+      setLoadingFont(fontId);
+      const loader = new FontLoader();
+      loader.load(
+        def.url,
+        (font) => {
+          fontsRef.current.set(fontId, font);
+          setFontsLoaded((prev) => new Set([...prev, fontId]));
+          setLoadingFont(null);
+          resolve(font);
+        },
+        undefined,
+        () => {
+          setLoadingFont(null);
+          reject(new Error(`Failed to load font: ${def.name}`));
+        }
+      );
+    });
+  }, []);
 
   // Init Three.js
   useEffect(() => {
@@ -568,7 +633,6 @@ export default function Speak23D() {
     controls.enableDamping = true;
     controlsRef.current = controls;
 
-    // Lights
     scene.add(new THREE.AmbientLight(0xffffff, 0.6));
     const sun = new THREE.DirectionalLight(0xffffff, 1);
     sun.position.set(0.5, 0.5, 1);
@@ -577,7 +641,6 @@ export default function Speak23D() {
     fill.position.set(-0.5, -0.3, 0.5);
     scene.add(fill);
 
-    // Grid
     const grid = new THREE.GridHelper(0.5, 50, 0x333355, 0x222244);
     grid.rotation.x = Math.PI / 2;
     grid.position.z = -0.02;
@@ -597,27 +660,19 @@ export default function Speak23D() {
     };
     window.addEventListener("resize", handleResize);
 
-    // Load font
-    const loader = new FontLoader();
-    loader.load(
-      "https://cdn.jsdelivr.net/npm/three@0.175.0/examples/fonts/helvetiker_bold.typeface.json",
-      (font) => {
-        fontRef.current = font;
-        setFontLoaded(true);
-        setStatus("Ready — enter your text and click Generate");
-      },
-      undefined,
-      () => {
-        setStatus("Error loading font");
-      }
-    );
+    // Load default font
+    loadFont("helvetiker").then(() => {
+      setStatus("Ready — enter your text and click Generate");
+    }).catch(() => {
+      setStatus("Error loading default font");
+    });
 
     return () => {
       window.removeEventListener("resize", handleResize);
       renderer.dispose();
       container.removeChild(renderer.domElement);
     };
-  }, []);
+  }, [loadFont]);
 
   const clearScene = useCallback(() => {
     const scene = sceneRef.current;
@@ -629,80 +684,87 @@ export default function Speak23D() {
     assemblyRef.current = { letters: [] };
   }, []);
 
-  const generate = useCallback(() => {
-    if (!fontRef.current || !sceneRef.current) return;
+  const generate = useCallback(async () => {
+    if (!sceneRef.current) return;
     setGenerating(true);
-    setStatus("Generating 3D model...");
-    clearScene();
+    setStatus("Loading font...");
 
-    // Use setTimeout to let UI update
-    setTimeout(() => {
-      try {
-        const font = fontRef.current!;
-        const scene = sceneRef.current!;
-        const letters = createLetterMeshes(font, params);
+    try {
+      const font = await loadFont(params.fontId);
+      clearScene();
+      setStatus("Generating 3D model...");
 
-        if (letters.length === 0) {
-          setStatus("No valid characters to generate");
-          setGenerating(false);
-          return;
-        }
+      // Use setTimeout to let UI update
+      await new Promise<void>((resolve) => {
+        setTimeout(() => {
+          try {
+            const scene = sceneRef.current!;
+            const letters = createLetterMeshes(font, params);
 
-        if (params.housing) {
-          setStatus("Building face plate...");
-          const face = createFacePlate(letters, params);
-          scene.add(face);
+            if (letters.length === 0) {
+              setStatus("No valid characters to generate");
+              setGenerating(false);
+              resolve();
+              return;
+            }
 
-          setStatus("Building back plate...");
-          const back = createBackPlate(letters, params);
-          scene.add(back);
+            if (params.housing) {
+              setStatus("Building face plate...");
+              const face = createFacePlate(letters, params);
+              scene.add(face);
 
-          assemblyRef.current.face = face;
-          assemblyRef.current.back = back;
+              setStatus("Building back plate...");
+              const back = createBackPlate(letters, params);
+              scene.add(back);
 
-          if (params.mount === "french_cleat") {
-            setStatus("Building wall cleat...");
-            const cleat = createWallCleat(letters, params);
-            // Position cleat offset for visibility
-            cleat.position.set(0, -0.1, 0);
-            cleat.updateMatrixWorld(true);
-            scene.add(cleat);
-            assemblyRef.current.cleat = cleat;
+              assemblyRef.current.face = face;
+              assemblyRef.current.back = back;
+
+              if (params.mount === "french_cleat") {
+                setStatus("Building wall cleat...");
+                const cleat = createWallCleat(letters, params);
+                cleat.position.set(0, -0.1, 0);
+                cleat.updateMatrixWorld(true);
+                scene.add(cleat);
+                assemblyRef.current.cleat = cleat;
+              }
+
+              const diffuser = createDiffuser(letters);
+              assemblyRef.current.diffuser = diffuser;
+            } else {
+              letters.forEach((l) => scene.add(l));
+            }
+
+            assemblyRef.current.letters = letters;
+
+            const allMeshes = scene.children.filter((c): c is THREE.Mesh => c.type === "Mesh");
+            if (allMeshes.length > 0) {
+              const { min, max } = getBounds(allMeshes);
+              const sx = ((max.x - min.x) * 1000).toFixed(1);
+              const sy = ((max.y - min.y) * 1000).toFixed(1);
+              const sz = ((max.z - min.z) * 1000).toFixed(1);
+              setDims(`${sx} × ${sy} × ${sz} mm`);
+
+              const size = Math.max(max.x - min.x, max.y - min.y, max.z - min.z);
+              cameraRef.current!.position.set(0, -size * 0.3, size * 2.5);
+              controlsRef.current!.target.set((min.x + max.x) / 2, (min.y + max.y) / 2, (min.z + max.z) / 2);
+              controlsRef.current!.update();
+            }
+
+            const fontDef = FONT_DEFS.find((f) => f.id === params.fontId);
+            setStatus(`✓ Model generated with ${fontDef?.name || params.fontId}`);
+          } catch (err: unknown) {
+            setStatus(`Error: ${err instanceof Error ? err.message : String(err)}`);
           }
-
-          const diffuser = createDiffuser(letters);
-          // Don't add to scene (it overlaps), but keep for export
-          assemblyRef.current.diffuser = diffuser;
-        } else {
-          // Simple mode: just letters
-          letters.forEach((l) => scene.add(l));
-        }
-
-        assemblyRef.current.letters = letters;
-
-        // Calculate dims
-        const allMeshes = scene.children.filter((c): c is THREE.Mesh => c.type === "Mesh");
-        if (allMeshes.length > 0) {
-          const { min, max } = getBounds(allMeshes);
-          const sx = ((max.x - min.x) * 1000).toFixed(1);
-          const sy = ((max.y - min.y) * 1000).toFixed(1);
-          const sz = ((max.z - min.z) * 1000).toFixed(1);
-          setDims(`${sx} × ${sy} × ${sz} mm`);
-
-          // Auto-zoom camera
-          const size = Math.max(max.x - min.x, max.y - min.y, max.z - min.z);
-          cameraRef.current!.position.set(0, -size * 0.3, size * 2.5);
-          controlsRef.current!.target.set((min.x + max.x) / 2, (min.y + max.y) / 2, (min.z + max.z) / 2);
-          controlsRef.current!.update();
-        }
-
-        setStatus("✓ Model generated — rotate with mouse, download below");
-      } catch (err: unknown) {
-        setStatus(`Error: ${err instanceof Error ? err.message : String(err)}`);
-      }
+          setGenerating(false);
+          resolve();
+        }, 50);
+      });
+    } catch (err: unknown) {
+      setStatus(`Error: ${err instanceof Error ? err.message : String(err)}`);
       setGenerating(false);
-    }, 50);
-  }, [params, clearScene]);
+    }
+  }, [params, clearScene, loadFont]);
 
   const downloadFile = useCallback((mesh: THREE.Mesh, name: string, format: "stl" | "3mf") => {
     const blob = format === "stl" ? exportSTL(mesh) : export3MF(mesh);
@@ -717,6 +779,13 @@ export default function Speak23D() {
   const update = (key: keyof Params, val: string | number | boolean) => {
     setParams((p) => ({ ...p, [key]: val }));
   };
+
+  // Group fonts by category for dropdown
+  const fontsByCategory = FONT_DEFS.reduce<Record<string, FontDef[]>>((acc, f) => {
+    if (!acc[f.category]) acc[f.category] = [];
+    acc[f.category].push(f);
+    return acc;
+  }, {});
 
   return (
     <div className="flex flex-col lg:flex-row h-screen">
@@ -743,29 +812,80 @@ export default function Speak23D() {
           <p className="text-zinc-500 text-xs mt-1">Letters, numbers, spaces. Max 12 chars.</p>
         </div>
 
-        {/* Size */}
+        {/* Font Selection */}
+        <div>
+          <label className="block text-sm font-medium text-zinc-300 mb-1">Font</label>
+          <select
+            value={params.fontId}
+            onChange={(e) => update("fontId", e.target.value)}
+            className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-white focus:border-blue-500 focus:outline-none"
+          >
+            {Object.entries(fontsByCategory).map(([category, fonts]) => (
+              <optgroup key={category} label={category}>
+                {fonts.map((f) => (
+                  <option key={f.id} value={f.id}>
+                    {f.name}
+                  </option>
+                ))}
+              </optgroup>
+            ))}
+          </select>
+          <p className="text-zinc-500 text-xs mt-1">
+            {FONT_DEFS.find((f) => f.id === params.fontId)?.description}
+            {loadingFont && ` (loading ${FONT_DEFS.find((f) => f.id === loadingFont)?.name}...)`}
+          </p>
+        </div>
+
+        {/* Size Controls */}
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <label className="block text-sm font-medium text-zinc-300 mb-1">Height (mm)</label>
+            <label className="block text-sm font-medium text-zinc-300 mb-1">
+              Height: {params.heightMM}mm
+            </label>
             <input
-              type="number"
+              type="range"
               value={params.heightMM}
               onChange={(e) => update("heightMM", Number(e.target.value))}
-              className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-white focus:border-blue-500 focus:outline-none"
+              className="w-full accent-blue-500"
               min={20}
               max={200}
+              step={5}
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-zinc-300 mb-1">Depth (mm)</label>
+            <label className="block text-sm font-medium text-zinc-300 mb-1">
+              Depth: {params.depthMM}mm
+            </label>
             <input
-              type="number"
+              type="range"
               value={params.depthMM}
               onChange={(e) => update("depthMM", Number(e.target.value))}
-              className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-white focus:border-blue-500 focus:outline-none"
+              className="w-full accent-blue-500"
               min={5}
               max={30}
+              step={1}
             />
+          </div>
+        </div>
+
+        {/* Letter Spacing */}
+        <div>
+          <label className="block text-sm font-medium text-zinc-300 mb-1">
+            Letter Spacing: {params.letterSpacing.toFixed(1)}×
+          </label>
+          <input
+            type="range"
+            value={params.letterSpacing}
+            onChange={(e) => update("letterSpacing", Number(e.target.value))}
+            className="w-full accent-purple-500"
+            min={0.5}
+            max={3.0}
+            step={0.1}
+          />
+          <div className="flex justify-between text-xs text-zinc-600">
+            <span>Tight</span>
+            <span>Normal</span>
+            <span>Wide</span>
           </div>
         </div>
 
@@ -834,7 +954,7 @@ export default function Speak23D() {
         {/* Generate Button */}
         <button
           onClick={generate}
-          disabled={generating || !fontLoaded}
+          disabled={generating}
           className="w-full py-3 rounded-lg font-semibold text-white bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
         >
           {generating ? "⏳ Generating..." : "🎨 Generate 3D Model"}
