@@ -679,7 +679,7 @@ function buildEnvironment(
 
       if (isNight) {
         const bulbGeo = new THREE.SphereGeometry(scale * 0.03, 16, 16);
-        const bulbMat = new THREE.MeshStandardMaterial({ color: 0xFFE4B5, emissive: 0xFFE4B5, emissiveIntensity: 2 });
+        const bulbMat = new THREE.MeshStandardMaterial({ color: 0xFFE4B5, emissive: 0xFFE4B5, emissiveIntensity: 1 });
         const bulb = new THREE.Mesh(bulbGeo, bulbMat);
         bulb.position.set(signCx + signW * 0.8, signCy + signH * 0.7, signBounds.min.z + scale * 0.08);
         group.add(bulb);
@@ -852,7 +852,7 @@ function addLEDVisualization(
       ? new THREE.MeshStandardMaterial({
         color: color3,
         emissive: color3,
-        emissiveIntensity: params.ledBrightness * 3,
+        emissiveIntensity: params.ledBrightness * 1.2,
         roughness: 0.2,
       })
       : new THREE.MeshStandardMaterial({
@@ -1509,7 +1509,7 @@ export default function Speak23D() {
     composer.addPass(renderPass);
     const bloomPass = new UnrealBloomPass(
       new THREE.Vector2(container.clientWidth, container.clientHeight),
-      0.5, 0.4, 0.85
+      0.3, 0.4, 0.85
     );
     composer.addPass(bloomPass);
     composerRef.current = composer;
@@ -1658,7 +1658,7 @@ export default function Speak23D() {
 
           // Update bloom based on LED state
           if (bloomPassRef.current) {
-            bloomPassRef.current.strength = params.ledOn ? params.ledBrightness * 1.0 : 0;
+            bloomPassRef.current.strength = params.ledOn ? params.ledBrightness * 0.5 : 0;
           }
 
           setStatus("✅ Model generated");
@@ -1688,7 +1688,7 @@ export default function Speak23D() {
     addLEDVisualization(scene, assemblyRef.current.letters, { ...params, ledOn: isNight ? params.ledOn : params.ledOn });
 
     if (bloomPassRef.current) {
-      bloomPassRef.current.strength = (params.ledOn && isNight) ? params.ledBrightness * 1.5 : params.ledOn ? params.ledBrightness * 0.5 : 0;
+      bloomPassRef.current.strength = (params.ledOn && isNight) ? params.ledBrightness * 0.7 : params.ledOn ? params.ledBrightness * 0.3 : 0;
     }
 
     // Adjust ambient light for day/night
