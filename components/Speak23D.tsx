@@ -7,6 +7,9 @@ import { FontLoader, Font } from "three/examples/jsm/loaders/FontLoader.js";
 import { TextGeometry } from "three/examples/jsm/geometries/TextGeometry.js";
 import { STLExporter } from "three/examples/jsm/exporters/STLExporter.js";
 import { CSG } from "three-csg-ts";
+import { EffectComposer } from "three/examples/jsm/postprocessing/EffectComposer.js";
+import { RenderPass } from "three/examples/jsm/postprocessing/RenderPass.js";
+import { UnrealBloomPass } from "three/examples/jsm/postprocessing/UnrealBloomPass.js";
 
 // ═══ Constants ═══════════════════════════════════════════════════════════
 const MM = 0.001;
@@ -21,6 +24,28 @@ const FONT_MAP: Record<string, { label: string; file: string }> = {
   pacifico: { label: "Pacifico", file: "/fonts/pacifico.typeface.json" },
   alfaslab: { label: "Alfa Slab One", file: "/fonts/alfa_slab_one.typeface.json" },
 };
+
+// ═══ LED Color Presets ═══════════════════════════════════════════════════
+const LED_COLOR_PRESETS: Record<string, { label: string; color: string }> = {
+  warm_white: { label: "Warm White", color: "#FFE4B5" },
+  cool_white: { label: "Cool White", color: "#F0F8FF" },
+  red: { label: "Red", color: "#FF0000" },
+  green: { label: "Green", color: "#00FF00" },
+  blue: { label: "Blue", color: "#0066FF" },
+  custom: { label: "Custom RGB", color: "#FF00FF" },
+};
+
+// ═══ Environment Presets ═════════════════════════════════════════════════
+type EnvironmentType = "house_wall" | "rock" | "fence" | "mailbox" | "freestanding";
+const ENVIRONMENT_PRESETS: Record<EnvironmentType, { label: string; icon: string }> = {
+  house_wall: { label: "House Wall", icon: "🏠" },
+  rock: { label: "Rock / Boulder", icon: "🪨" },
+  fence: { label: "Fence / Gate", icon: "🚧" },
+  mailbox: { label: "Mailbox", icon: "📬" },
+  freestanding: { label: "Freestanding", icon: "🌿" },
+};
+
+type WallTexture = "brick" | "wood_siding" | "stucco" | "modern_render";
 
 // ═══ Types ═══════════════════════════════════════════════════════════════
 type BackplateShape = "rectangle" | "rounded_rect" | "oval" | "arch" | "auto_contour" | "none";
@@ -51,6 +76,11 @@ interface Params {
   reflector: "parabolic" | "faceted" | "none";
   showMountingPoints: boolean;
   letterMounting: boolean;
+  // LED visualization
+  ledOn: boolean;
+  ledColorPreset: string;
+  ledCustomColor: string;
+  ledBrightness: number;
 }
 
 const DEFAULT_PARAMS: Params = {
@@ -72,6 +102,10 @@ const DEFAULT_PARAMS: Params = {
   reflector: "none",
   showMountingPoints: false,
   letterMounting: true,
+  ledOn: true,
+  ledColorPreset: "warm_white",
+  ledCustomColor: "#FF00FF",
+  ledBrightness: 0.8,
 };
 
 const LED_CHANNELS: Record<string, [number, number]> = {
@@ -141,6 +175,65 @@ function getRecommendations(params: Params): Recommendation {
   }
 
   return { font, size, style, material };
+}
+
+// ═══ URL Params for Share Links ══════════════════════════════════════════
+
+function encodeParamsToURL(params: Params): string {
+  const data: Record<string, string> = {
+    t: params.lines.map(l => `${l.text}|${l.align}`).join("~"),
+    f: params.font,
+    h: String(params.heightMM),
+    d: String(params.depthMM),
+    p: String(params.paddingMM),
+    w: String(params.wallThickMM),
+    s: String(params.scaleFactor),
+    ho: params.housing ? "1" : "0",
+    lt: params.ledType,
+    bs: params.backplateShape,
+    cr: String(params.cornerRadiusMM),
+    mt: params.mountType,
+    hd: String(params.holeDiameterMM),
+    ls: String(params.lineSpacingMM),
+    lo: params.ledOn ? "1" : "0",
+    lc: params.ledColorPreset,
+    lcc: params.ledCustomColor,
+    lb: String(params.ledBrightness),
+  };
+  const sp = new URLSearchParams(data);
+  return `${window.location.origin}${window.location.pathname}?${sp.toString()}`;
+}
+
+function decodeParamsFromURL(): Partial<Params> | null {
+  if (typeof window === "undefined") return null;
+  const sp = new URLSearchParams(window.location.search);
+  if (!sp.has("t")) return null;
+  const result: Partial<Params> = {};
+  const t = sp.get("t");
+  if (t) {
+    result.lines = t.split("~").map(seg => {
+      const [text, align] = seg.split("|");
+      return { text: text || "", align: (align as LineAlign) || "center" };
+    });
+  }
+  if (sp.has("f")) result.font = sp.get("f")!;
+  if (sp.has("h")) result.heightMM = Number(sp.get("h"));
+  if (sp.has("d")) result.depthMM = Number(sp.get("d"));
+  if (sp.has("p")) result.paddingMM = Number(sp.get("p"));
+  if (sp.has("w")) result.wallThickMM = Number(sp.get("w"));
+  if (sp.has("s")) result.scaleFactor = Number(sp.get("s"));
+  if (sp.has("ho")) result.housing = sp.get("ho") === "1";
+  if (sp.has("lt")) result.ledType = sp.get("lt") as Params["ledType"];
+  if (sp.has("bs")) result.backplateShape = sp.get("bs") as BackplateShape;
+  if (sp.has("cr")) result.cornerRadiusMM = Number(sp.get("cr"));
+  if (sp.has("mt")) result.mountType = sp.get("mt") as MountType;
+  if (sp.has("hd")) result.holeDiameterMM = Number(sp.get("hd"));
+  if (sp.has("ls")) result.lineSpacingMM = Number(sp.get("ls"));
+  if (sp.has("lo")) result.ledOn = sp.get("lo") === "1";
+  if (sp.has("lc")) result.ledColorPreset = sp.get("lc")!;
+  if (sp.has("lcc")) result.ledCustomColor = sp.get("lcc")!;
+  if (sp.has("lb")) result.ledBrightness = Number(sp.get("lb"));
+  return result;
 }
 
 // ═══ Geometry Helpers ════════════════════════════════════════════════════
@@ -278,35 +371,30 @@ function createRimFromShape(
 // ═══ Hidden Letter Mounting Points ═══════════════════════════════════════
 
 interface MountingPoint {
-  x: number; // mm
-  y: number; // mm
+  x: number;
+  y: number;
   letterChar: string;
   letterIndex: number;
 }
 
 function computeLetterMountingPoints(letters: THREE.Mesh[], params: Params): MountingPoint[] {
   const points: MountingPoint[] = [];
-  const throughR = 1.5; // 3mm through-hole diameter / 2
+  const throughR = 1.5;
   const narrowChars = new Set(["I", "1", ".", "!", "|", "L"]);
 
   letters.forEach((letter, idx) => {
     letter.geometry.computeBoundingBox();
     const bb = letter.geometry.boundingBox!.clone();
     bb.applyMatrix4(letter.matrixWorld);
-    const lw = (bb.max.x - bb.min.x) * 1000; // mm
-    const lh = (bb.max.y - bb.min.y) * 1000;
+    const lw = (bb.max.x - bb.min.x) * 1000;
     const cx = ((bb.min.x + bb.max.x) / 2) * 1000;
     const cy = ((bb.min.y + bb.max.y) / 2) * 1000;
-
-    // Determine letter character from userData or index
     const ch = (letter.userData?.char as string) || "";
     const isNarrow = narrowChars.has(ch) || lw < params.heightMM * 0.4;
 
     if (isNarrow || lw < throughR * 8) {
-      // Single center hole
       points.push({ x: cx, y: cy, letterChar: ch, letterIndex: idx });
     } else {
-      // Two holes at 25% and 75% width
       const x25 = (bb.min.x + (bb.max.x - bb.min.x) * 0.25) * 1000;
       const x75 = (bb.min.x + (bb.max.x - bb.min.x) * 0.75) * 1000;
       points.push({ x: x25, y: cy, letterChar: ch, letterIndex: idx });
@@ -318,8 +406,8 @@ function computeLetterMountingPoints(letters: THREE.Mesh[], params: Params): Mou
 }
 
 function addLetterMountingHoles(letterMesh: THREE.Mesh, params: Params): THREE.Mesh {
-  const throughR = 1.5 * MM * params.scaleFactor; // 3mm dia
-  const counterR = 3.0 * MM * params.scaleFactor; // 6mm dia countersink
+  const throughR = 1.5 * MM * params.scaleFactor;
+  const counterR = 3.0 * MM * params.scaleFactor;
   const counterDepth = 3.0 * MM * params.scaleFactor;
   const d = params.depthMM * MM * params.scaleFactor;
 
@@ -345,7 +433,6 @@ function addLetterMountingHoles(letterMesh: THREE.Mesh, params: Params): THREE.M
 
   let result = letterMesh;
   for (const hx of holeXPositions) {
-    // Through hole (full depth)
     const through = cylMesh(throughR, d * 3, 0x666666);
     through.rotation.set(Math.PI / 2, 0, 0);
     through.position.set(hx, cy, backZ);
@@ -353,7 +440,6 @@ function addLetterMountingHoles(letterMesh: THREE.Mesh, params: Params): THREE.M
     result = safeCSG(result, through, "subtract");
     result.updateMatrixWorld(true);
 
-    // Countersink on back face
     const counter = cylMesh(counterR, counterDepth, 0x666666);
     counter.rotation.set(Math.PI / 2, 0, 0);
     counter.position.set(hx, cy, bb.min.z + counterDepth / 2);
@@ -367,7 +453,6 @@ function addLetterMountingHoles(letterMesh: THREE.Mesh, params: Params): THREE.M
 
 function generateDrillingSVG(mountingPoints: MountingPoint[], params: Params): string {
   if (mountingPoints.length === 0) return "";
-  // Find bounding box of all points
   const xs = mountingPoints.map((p) => p.x);
   const ys = mountingPoints.map((p) => p.y);
   const margin = 20;
@@ -378,10 +463,9 @@ function generateDrillingSVG(mountingPoints: MountingPoint[], params: Params): s
   const w = maxX - minX;
   const h = maxY - minY;
 
-  // SVG at 1:1 scale (1 unit = 1mm)
   const circles = mountingPoints.map((p) => {
     const sx = p.x - minX;
-    const sy = maxY - p.y; // flip Y
+    const sy = maxY - p.y;
     return `<circle cx="${sx.toFixed(2)}" cy="${sy.toFixed(2)}" r="1.5" fill="none" stroke="#333" stroke-width="0.3"/>
 <circle cx="${sx.toFixed(2)}" cy="${sy.toFixed(2)}" r="3" fill="none" stroke="#999" stroke-width="0.2" stroke-dasharray="1,1"/>
 <circle cx="${sx.toFixed(2)}" cy="${sy.toFixed(2)}" r="0.3" fill="#333"/>
@@ -395,10 +479,400 @@ function generateDrillingSVG(mountingPoints: MountingPoint[], params: Params): s
 <text x="5" y="5" font-size="3" fill="#999">Drilling Template (1:1) — 3mm through + 6mm countersink</text>
 <text x="5" y="9" font-size="2.5" fill="#bbb">Height: ${params.heightMM}mm | Font: ${FONT_MAP[params.font]?.label || params.font}</text>
 ${circles}
-<!-- Scale reference: 10mm bar -->
 <line x1="5" y1="${h - 5}" x2="15" y2="${h - 5}" stroke="#333" stroke-width="0.3"/>
 <text x="10" y="${h - 6}" font-size="2" text-anchor="middle" fill="#666">10mm</text>
 </svg>`;
+}
+
+// ═══ Environment Scene Builders ══════════════════════════════════════════
+
+function createProceduralBrickTexture(): THREE.CanvasTexture {
+  const canvas = document.createElement("canvas");
+  canvas.width = 512;
+  canvas.height = 512;
+  const ctx = canvas.getContext("2d")!;
+  ctx.fillStyle = "#8B4513";
+  ctx.fillRect(0, 0, 512, 512);
+  const brickW = 64, brickH = 28, mortarW = 3;
+  for (let row = 0; row < 20; row++) {
+    const offset = row % 2 === 0 ? 0 : brickW / 2;
+    for (let col = -1; col < 9; col++) {
+      const x = col * (brickW + mortarW) + offset;
+      const y = row * (brickH + mortarW);
+      const r = 140 + Math.random() * 40;
+      const g = 60 + Math.random() * 30;
+      const b = 30 + Math.random() * 20;
+      ctx.fillStyle = `rgb(${r},${g},${b})`;
+      ctx.fillRect(x, y, brickW, brickH);
+    }
+  }
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  return tex;
+}
+
+function createProceduralWoodTexture(): THREE.CanvasTexture {
+  const canvas = document.createElement("canvas");
+  canvas.width = 512;
+  canvas.height = 512;
+  const ctx = canvas.getContext("2d")!;
+  ctx.fillStyle = "#A0522D";
+  ctx.fillRect(0, 0, 512, 512);
+  for (let i = 0; i < 100; i++) {
+    const y = Math.random() * 512;
+    ctx.strokeStyle = `rgba(${60 + Math.random() * 40}, ${30 + Math.random() * 20}, ${10}, ${0.1 + Math.random() * 0.2})`;
+    ctx.lineWidth = 1 + Math.random() * 3;
+    ctx.beginPath();
+    ctx.moveTo(0, y);
+    ctx.lineTo(512, y + (Math.random() - 0.5) * 10);
+    ctx.stroke();
+  }
+  // Plank lines
+  for (let x = 0; x < 512; x += 85) {
+    ctx.strokeStyle = "rgba(0,0,0,0.3)";
+    ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, 512); ctx.stroke();
+  }
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  return tex;
+}
+
+function createProceduralStuccoTexture(): THREE.CanvasTexture {
+  const canvas = document.createElement("canvas");
+  canvas.width = 256;
+  canvas.height = 256;
+  const ctx = canvas.getContext("2d")!;
+  ctx.fillStyle = "#E8DCC8";
+  ctx.fillRect(0, 0, 256, 256);
+  for (let i = 0; i < 3000; i++) {
+    const x = Math.random() * 256, y = Math.random() * 256;
+    const v = 200 + Math.random() * 40;
+    ctx.fillStyle = `rgb(${v},${v - 10},${v - 20})`;
+    ctx.fillRect(x, y, 1 + Math.random() * 2, 1 + Math.random() * 2);
+  }
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  return tex;
+}
+
+function createProceduralRenderTexture(): THREE.CanvasTexture {
+  const canvas = document.createElement("canvas");
+  canvas.width = 256;
+  canvas.height = 256;
+  const ctx = canvas.getContext("2d")!;
+  ctx.fillStyle = "#D3D3D3";
+  ctx.fillRect(0, 0, 256, 256);
+  for (let i = 0; i < 500; i++) {
+    const x = Math.random() * 256, y = Math.random() * 256;
+    const v = 190 + Math.random() * 30;
+    ctx.fillStyle = `rgb(${v},${v},${v})`;
+    ctx.fillRect(x, y, 1, 1);
+  }
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  return tex;
+}
+
+function getWallTexture(wallType: WallTexture): THREE.CanvasTexture {
+  switch (wallType) {
+    case "brick": return createProceduralBrickTexture();
+    case "wood_siding": return createProceduralWoodTexture();
+    case "stucco": return createProceduralStuccoTexture();
+    case "modern_render": return createProceduralRenderTexture();
+  }
+}
+
+function createProceduralStoneTexture(): THREE.CanvasTexture {
+  const canvas = document.createElement("canvas");
+  canvas.width = 512;
+  canvas.height = 512;
+  const ctx = canvas.getContext("2d")!;
+  ctx.fillStyle = "#808080";
+  ctx.fillRect(0, 0, 512, 512);
+  for (let i = 0; i < 5000; i++) {
+    const x = Math.random() * 512, y = Math.random() * 512;
+    const v = 100 + Math.random() * 80;
+    ctx.fillStyle = `rgb(${v},${v - 5},${v - 10})`;
+    ctx.fillRect(x, y, 1 + Math.random() * 3, 1 + Math.random() * 3);
+  }
+  // cracks
+  for (let i = 0; i < 15; i++) {
+    ctx.strokeStyle = `rgba(50,50,50,${0.1 + Math.random() * 0.2})`;
+    ctx.lineWidth = 0.5 + Math.random();
+    ctx.beginPath();
+    let x = Math.random() * 512, y = Math.random() * 512;
+    ctx.moveTo(x, y);
+    for (let j = 0; j < 10; j++) {
+      x += (Math.random() - 0.5) * 40;
+      y += Math.random() * 30;
+      ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+  }
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  return tex;
+}
+
+function createProceduralGrassTexture(): THREE.CanvasTexture {
+  const canvas = document.createElement("canvas");
+  canvas.width = 256;
+  canvas.height = 256;
+  const ctx = canvas.getContext("2d")!;
+  ctx.fillStyle = "#2d5a27";
+  ctx.fillRect(0, 0, 256, 256);
+  for (let i = 0; i < 4000; i++) {
+    const x = Math.random() * 256;
+    const y = Math.random() * 256;
+    const g = 60 + Math.random() * 80;
+    ctx.strokeStyle = `rgb(${20 + Math.random() * 30},${g},${10 + Math.random() * 20})`;
+    ctx.lineWidth = 0.5 + Math.random();
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+    ctx.lineTo(x + (Math.random() - 0.5) * 4, y - 3 - Math.random() * 5);
+    ctx.stroke();
+  }
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  return tex;
+}
+
+function buildEnvironment(
+  scene: THREE.Scene,
+  envType: EnvironmentType,
+  wallTexture: WallTexture,
+  isNight: boolean,
+  signBounds: { min: THREE.Vector3; max: THREE.Vector3 }
+): THREE.Group {
+  const group = new THREE.Group();
+  group.name = "environment";
+  const signW = signBounds.max.x - signBounds.min.x;
+  const signH = signBounds.max.y - signBounds.min.y;
+  const signCx = (signBounds.min.x + signBounds.max.x) / 2;
+  const signCy = (signBounds.min.y + signBounds.max.y) / 2;
+  const scale = Math.max(signW, signH);
+
+  if (isNight) {
+    scene.background = new THREE.Color(0x0a0a1a);
+  } else {
+    scene.background = new THREE.Color(0x87CEEB);
+  }
+
+  switch (envType) {
+    case "house_wall": {
+      const wallW = scale * 8, wallH = scale * 6;
+      const tex = getWallTexture(wallTexture);
+      tex.repeat.set(wallW * 10, wallH * 10);
+      const wallGeo = new THREE.PlaneGeometry(wallW, wallH);
+      const wallMat = new THREE.MeshStandardMaterial({ map: tex, roughness: 0.9 });
+      const wall = new THREE.Mesh(wallGeo, wallMat);
+      wall.position.set(signCx, signCy, signBounds.min.z - 0.005);
+      group.add(wall);
+
+      // Porch light
+      const lightFixtureGeo = new THREE.CylinderGeometry(scale * 0.06, scale * 0.04, scale * 0.2, 8);
+      const lightFixtureMat = new THREE.MeshStandardMaterial({ color: 0x333333, metalness: 0.8 });
+      const lightFixture = new THREE.Mesh(lightFixtureGeo, lightFixtureMat);
+      lightFixture.position.set(signCx + signW * 0.8, signCy + signH * 0.8, signBounds.min.z + scale * 0.05);
+      group.add(lightFixture);
+
+      if (isNight) {
+        const bulbGeo = new THREE.SphereGeometry(scale * 0.03, 16, 16);
+        const bulbMat = new THREE.MeshStandardMaterial({ color: 0xFFE4B5, emissive: 0xFFE4B5, emissiveIntensity: 2 });
+        const bulb = new THREE.Mesh(bulbGeo, bulbMat);
+        bulb.position.set(signCx + signW * 0.8, signCy + signH * 0.7, signBounds.min.z + scale * 0.08);
+        group.add(bulb);
+        const porchLight = new THREE.PointLight(0xFFE4B5, 1.5, scale * 4);
+        porchLight.position.copy(bulb.position);
+        group.add(porchLight);
+      }
+      break;
+    }
+    case "rock": {
+      // Large boulder
+      const rockGeo = new THREE.DodecahedronGeometry(scale * 1.5, 2);
+      const positions = rockGeo.getAttribute("position");
+      for (let i = 0; i < positions.count; i++) {
+        const x = positions.getX(i), y = positions.getY(i), z = positions.getZ(i);
+        const noise = 1 + (Math.sin(x * 5) * Math.cos(y * 3) * 0.15);
+        positions.setXYZ(i, x * noise, y * noise * 0.7, z * noise);
+      }
+      rockGeo.computeVertexNormals();
+      const stoneTex = createProceduralStoneTexture();
+      const rockMat = new THREE.MeshStandardMaterial({ map: stoneTex, roughness: 0.95, color: 0x808080 });
+      const rock = new THREE.Mesh(rockGeo, rockMat);
+      rock.position.set(signCx, signCy - signH * 0.6, signBounds.min.z - scale * 0.3);
+      rock.scale.set(1, 0.6, 0.5);
+      group.add(rock);
+
+      // Ground plane
+      const grassTex = createProceduralGrassTexture();
+      grassTex.repeat.set(8, 8);
+      const groundGeo = new THREE.PlaneGeometry(scale * 10, scale * 10);
+      const groundMat = new THREE.MeshStandardMaterial({ map: grassTex, roughness: 0.95 });
+      const ground = new THREE.Mesh(groundGeo, groundMat);
+      ground.rotation.x = -Math.PI / 2;
+      ground.position.set(signCx, signCy - signH * 1.5, signBounds.min.z);
+      group.add(ground);
+      break;
+    }
+    case "fence": {
+      // Fence posts and rails
+      const postH = scale * 3, postW = scale * 0.15;
+      const woodTex = createProceduralWoodTexture();
+      const fenceMat = new THREE.MeshStandardMaterial({ map: woodTex, roughness: 0.85, color: 0xDEB887 });
+
+      for (let i = -2; i <= 2; i++) {
+        const postGeo = new THREE.BoxGeometry(postW, postH, postW);
+        const post = new THREE.Mesh(postGeo, fenceMat.clone());
+        post.position.set(signCx + i * scale * 0.8, signCy - signH * 0.2, signBounds.min.z - postW / 2);
+        group.add(post);
+      }
+      // Rails
+      for (const yOff of [-0.5, 0.3]) {
+        const railGeo = new THREE.BoxGeometry(scale * 4, postW * 0.6, postW * 0.8);
+        const rail = new THREE.Mesh(railGeo, fenceMat.clone());
+        rail.position.set(signCx, signCy + signH * yOff, signBounds.min.z - postW * 0.3);
+        group.add(rail);
+      }
+
+      const grassTex2 = createProceduralGrassTexture();
+      grassTex2.repeat.set(8, 8);
+      const g2 = new THREE.PlaneGeometry(scale * 10, scale * 10);
+      const gm2 = new THREE.MeshStandardMaterial({ map: grassTex2, roughness: 0.95 });
+      const ground2 = new THREE.Mesh(g2, gm2);
+      ground2.rotation.x = -Math.PI / 2;
+      ground2.position.set(signCx, signCy - postH / 2, signBounds.min.z);
+      group.add(ground2);
+      break;
+    }
+    case "mailbox": {
+      // Post
+      const postGeo = new THREE.BoxGeometry(scale * 0.15, scale * 3, scale * 0.15);
+      const postMat = new THREE.MeshStandardMaterial({ color: 0x8B4513, roughness: 0.8 });
+      const post = new THREE.Mesh(postGeo, postMat);
+      post.position.set(signCx, signCy - signH * 0.5, signBounds.min.z - scale * 0.1);
+      group.add(post);
+
+      // Mailbox body
+      const mbGeo = new THREE.BoxGeometry(scale * 0.5, scale * 0.35, scale * 0.7);
+      const mbMat = new THREE.MeshStandardMaterial({ color: 0x222222, roughness: 0.4, metalness: 0.6 });
+      const mb = new THREE.Mesh(mbGeo, mbMat);
+      mb.position.set(signCx, signCy + signH * 0.6, signBounds.min.z + scale * 0.2);
+      group.add(mb);
+
+      // Flag
+      const flagGeo = new THREE.BoxGeometry(scale * 0.03, scale * 0.2, scale * 0.15);
+      const flagMat = new THREE.MeshStandardMaterial({ color: 0xFF0000 });
+      const flag = new THREE.Mesh(flagGeo, flagMat);
+      flag.position.set(signCx + scale * 0.28, signCy + signH * 0.7, signBounds.min.z + scale * 0.15);
+      group.add(flag);
+
+      const grassTex3 = createProceduralGrassTexture();
+      grassTex3.repeat.set(8, 8);
+      const g3 = new THREE.PlaneGeometry(scale * 10, scale * 10);
+      const gm3 = new THREE.MeshStandardMaterial({ map: grassTex3, roughness: 0.95 });
+      const ground3 = new THREE.Mesh(g3, gm3);
+      ground3.rotation.x = -Math.PI / 2;
+      ground3.position.set(signCx, signCy - scale * 1.5, signBounds.min.z);
+      group.add(ground3);
+      break;
+    }
+    case "freestanding": {
+      // Stake
+      const stakeGeo = new THREE.BoxGeometry(scale * 0.08, scale * 2.5, scale * 0.08);
+      const stakeMat = new THREE.MeshStandardMaterial({ color: 0x333333, metalness: 0.7, roughness: 0.3 });
+      const stake = new THREE.Mesh(stakeGeo, stakeMat);
+      stake.position.set(signCx, signCy - signH * 0.8, signBounds.min.z);
+      group.add(stake);
+
+      // Ground
+      const grassTex4 = createProceduralGrassTexture();
+      grassTex4.repeat.set(10, 10);
+      const g4 = new THREE.PlaneGeometry(scale * 12, scale * 12);
+      const gm4 = new THREE.MeshStandardMaterial({ map: grassTex4, roughness: 0.95 });
+      const ground4 = new THREE.Mesh(g4, gm4);
+      ground4.rotation.x = -Math.PI / 2;
+      ground4.position.set(signCx, signCy - scale * 2, signBounds.min.z);
+      group.add(ground4);
+
+      // Small bushes
+      for (let i = 0; i < 5; i++) {
+        const bushGeo = new THREE.SphereGeometry(scale * (0.15 + Math.random() * 0.15), 8, 8);
+        const bushMat = new THREE.MeshStandardMaterial({ color: new THREE.Color(0.1 + Math.random() * 0.1, 0.3 + Math.random() * 0.2, 0.05) });
+        const bush = new THREE.Mesh(bushGeo, bushMat);
+        bush.position.set(
+          signCx + (Math.random() - 0.5) * scale * 3,
+          signCy - scale * 1.8,
+          signBounds.min.z + (Math.random() - 0.5) * scale * 0.5
+        );
+        bush.scale.y = 0.7;
+        group.add(bush);
+      }
+      break;
+    }
+  }
+
+  scene.add(group);
+  return group;
+}
+
+// ═══ LED Housing Visualization ═══════════════════════════════════════════
+
+function addLEDVisualization(
+  scene: THREE.Scene,
+  letters: THREE.Mesh[],
+  params: Params
+): THREE.Group {
+  const group = new THREE.Group();
+  group.name = "led_visualization";
+  const ledColor = params.ledColorPreset === "custom"
+    ? params.ledCustomColor
+    : (LED_COLOR_PRESETS[params.ledColorPreset]?.color || "#FFE4B5");
+  const color3 = new THREE.Color(ledColor);
+  const [ledW, ledD] = LED_CHANNELS[params.ledType] || [12, 4];
+
+  for (const letter of letters) {
+    letter.geometry.computeBoundingBox();
+    const bb = letter.geometry.boundingBox!.clone();
+    bb.applyMatrix4(letter.matrixWorld);
+    const lCx = (bb.min.x + bb.max.x) / 2;
+    const lCy = (bb.min.y + bb.max.y) / 2;
+    const chLen = (bb.max.y - bb.min.y) * 0.8;
+    const channelZ = bb.min.z - ledD * MM * 0.5;
+
+    // Channel groove geometry (dark recessed channel)
+    const channelGeo = new THREE.BoxGeometry(
+      ledW * MM * 1.1,
+      Math.max(chLen, ledW * MM),
+      ledD * MM
+    );
+    const channelMat = params.ledOn
+      ? new THREE.MeshStandardMaterial({
+        color: color3,
+        emissive: color3,
+        emissiveIntensity: params.ledBrightness * 3,
+        roughness: 0.2,
+      })
+      : new THREE.MeshStandardMaterial({
+        color: 0x111111,
+        roughness: 0.9,
+      });
+    const channel = new THREE.Mesh(channelGeo, channelMat);
+    channel.position.set(lCx, lCy, channelZ);
+    group.add(channel);
+
+    // Add point light per letter when on
+    if (params.ledOn) {
+      const pl = new THREE.PointLight(color3, params.ledBrightness * 0.5, 0.15);
+      pl.position.set(lCx, lCy, channelZ + ledD * MM);
+      group.add(pl);
+    }
+  }
+
+  scene.add(group);
+  return group;
 }
 
 // ═══ Assembly Generation ═════════════════════════════════════════════════
@@ -466,8 +940,8 @@ function createMultiLineLetterMeshes(font: Font, params: Params): THREE.Mesh[] {
     lineMeasures.push({ meshes, width: totalW, config: lineConf });
   }
 
-  const totalHeight = lineMeasures.length * h + (lineMeasures.length - 1) * lineSpacing;
-  let yPos = totalHeight / 2 - h / 2;
+  const totalHeight = lineMeasures.length * (params.heightMM * MM * params.scaleFactor) + (lineMeasures.length - 1) * lineSpacing;
+  let yPos = totalHeight / 2 - (params.heightMM * MM * params.scaleFactor) / 2;
   const maxWidth = Math.max(...lineMeasures.map((l) => l.width), 0.001);
 
   for (const line of lineMeasures) {
@@ -489,7 +963,7 @@ function createMultiLineLetterMeshes(font: Font, params: Params): THREE.Mesh[] {
       mesh.updateMatrixWorld(true);
       allMeshes.push(mesh);
     }
-    yPos -= h + lineSpacing;
+    yPos -= (params.heightMM * MM * params.scaleFactor) + lineSpacing;
   }
 
   return allMeshes;
@@ -930,10 +1404,13 @@ export default function Speak23D() {
   const controlsRef = useRef<OrbitControls | null>(null);
   const fontRef = useRef<Font | null>(null);
   const fontCacheRef = useRef<Record<string, Font>>({});
+  const composerRef = useRef<EffectComposer | null>(null);
+  const bloomPassRef = useRef<UnrealBloomPass | null>(null);
   const assemblyRef = useRef<{
     face?: THREE.Mesh; back?: THREE.Mesh; cleat?: THREE.Mesh; diffuser?: THREE.Mesh; letters: THREE.Mesh[];
     ledStrips: THREE.Mesh[]; diffuserPlate?: THREE.Mesh; wall?: THREE.Mesh;
     mountingPoints?: MountingPoint[];
+    signBounds?: { min: THREE.Vector3; max: THREE.Vector3 };
   }>({ letters: [], ledStrips: [] });
 
   const [params, setParams] = useState<Params>(DEFAULT_PARAMS);
@@ -943,11 +1420,26 @@ export default function Speak23D() {
   const [status, setStatus] = useState("Loading font...");
   const [hasGenerated, setHasGenerated] = useState(false);
   const [mountingPoints, setMountingPoints] = useState<MountingPoint[]>([]);
+  const [activeTab, setActiveTab] = useState<"design" | "preview">("design");
+  const [envType, setEnvType] = useState<EnvironmentType>("house_wall");
+  const [wallTexture, setWallTexture] = useState<WallTexture>("brick");
+  const [isNight, setIsNight] = useState(false);
+  const [shareLink, setShareLink] = useState("");
+  const [shareCopied, setShareCopied] = useState(false);
+  const [fontTestResults, setFontTestResults] = useState<Record<string, boolean>>({});
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({
     dimensions: true, shape: false, mounting: false, multiline: false, led: false, font: true,
   });
 
   const toggleSection = (s: string) => setExpandedSections((prev) => ({ ...prev, [s]: !prev[s] }));
+
+  // Load params from URL on mount
+  useEffect(() => {
+    const urlParams = decodeParamsFromURL();
+    if (urlParams) {
+      setParams(p => ({ ...p, ...urlParams }));
+    }
+  }, []);
 
   const loadFont = useCallback((fontKey: string, callback: (font: Font) => void) => {
     if (fontCacheRef.current[fontKey]) {
@@ -963,6 +1455,36 @@ export default function Speak23D() {
     }, undefined, () => setStatus(`Error loading font: ${entry.label}`));
   }, []);
 
+  // Font verification
+  const verifyAllFonts = useCallback(() => {
+    const results: Record<string, boolean> = {};
+    let completed = 0;
+    const total = Object.keys(FONT_MAP).length;
+
+    Object.entries(FONT_MAP).forEach(([key, entry]) => {
+      const loader = new FontLoader();
+      loader.load(entry.file, (font) => {
+        try {
+          const geo = new TextGeometry("A", { font, size: 0.01, depth: 0.001, curveSegments: 2, bevelEnabled: false });
+          geo.computeBoundingBox();
+          const bb = geo.boundingBox!;
+          const valid = (bb.max.x - bb.min.x) > 0 && (bb.max.y - bb.min.y) > 0;
+          results[key] = valid;
+          fontCacheRef.current[key] = font;
+          geo.dispose();
+        } catch {
+          results[key] = false;
+        }
+        completed++;
+        if (completed === total) setFontTestResults({ ...results });
+      }, undefined, () => {
+        results[key] = false;
+        completed++;
+        if (completed === total) setFontTestResults({ ...results });
+      });
+    });
+  }, []);
+
   // Init Three.js
   useEffect(() => {
     if (!canvasRef.current) return;
@@ -970,14 +1492,29 @@ export default function Speak23D() {
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(0x1a1a2e);
     sceneRef.current = scene;
-    const camera = new THREE.PerspectiveCamera(45, container.clientWidth / container.clientHeight, 0.001, 10);
+    const camera = new THREE.PerspectiveCamera(45, container.clientWidth / container.clientHeight, 0.001, 100);
     camera.position.set(0, 0, 0.4);
     cameraRef.current = camera;
-    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
     renderer.setSize(container.clientWidth, container.clientHeight);
     renderer.setPixelRatio(window.devicePixelRatio);
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.0;
     container.appendChild(renderer.domElement);
     rendererRef.current = renderer;
+
+    // Post-processing for bloom
+    const composer = new EffectComposer(renderer);
+    const renderPass = new RenderPass(scene, camera);
+    composer.addPass(renderPass);
+    const bloomPass = new UnrealBloomPass(
+      new THREE.Vector2(container.clientWidth, container.clientHeight),
+      0.5, 0.4, 0.85
+    );
+    composer.addPass(bloomPass);
+    composerRef.current = composer;
+    bloomPassRef.current = bloomPass;
+
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
     controlsRef.current = controls;
@@ -992,9 +1529,24 @@ export default function Speak23D() {
     grid.rotation.x = Math.PI / 2;
     grid.position.z = -0.02;
     scene.add(grid);
-    const animate = () => { requestAnimationFrame(animate); controls.update(); renderer.render(scene, camera); };
+    const animate = () => {
+      requestAnimationFrame(animate);
+      controls.update();
+      if (composerRef.current && bloomPassRef.current && bloomPassRef.current.strength > 0) {
+        composerRef.current.render();
+      } else {
+        renderer.render(scene, camera);
+      }
+    };
     animate();
-    const handleResize = () => { camera.aspect = container.clientWidth / container.clientHeight; camera.updateProjectionMatrix(); renderer.setSize(container.clientWidth, container.clientHeight); };
+    const handleResize = () => {
+      camera.aspect = container.clientWidth / container.clientHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(container.clientWidth, container.clientHeight);
+      if (composerRef.current) {
+        composerRef.current.setSize(container.clientWidth, container.clientHeight);
+      }
+    };
     window.addEventListener("resize", handleResize);
 
     // Load default font
@@ -1015,6 +1567,15 @@ export default function Speak23D() {
     if (!scene) return;
     scene.children.filter((c) => c.type === "Mesh" || c.type === "Group").forEach((c) => scene.remove(c));
     assemblyRef.current = { letters: [], ledStrips: [] };
+  }, []);
+
+  const clearEnvironment = useCallback(() => {
+    const scene = sceneRef.current;
+    if (!scene) return;
+    const env = scene.getObjectByName("environment");
+    if (env) scene.remove(env);
+    const led = scene.getObjectByName("led_visualization");
+    if (led) scene.remove(led);
   }, []);
 
   const generate = useCallback(() => {
@@ -1051,7 +1612,6 @@ export default function Speak23D() {
             }
             assemblyRef.current.diffuser = createDiffuser(letters, params);
           } else {
-            // No backplate or no housing — letters only, with optional mounting holes
             const processedLetters: THREE.Mesh[] = [];
             for (const l of letters) {
               let processed = l;
@@ -1063,14 +1623,12 @@ export default function Speak23D() {
             }
             assemblyRef.current.letters = processedLetters;
 
-            // Compute mounting points for SVG template
             if (isNoBackplate && params.letterMounting) {
               const pts = computeLetterMountingPoints(processedLetters, params);
               assemblyRef.current.mountingPoints = pts;
               setMountingPoints(pts);
             }
 
-            // Show mounting point indicators
             if (isNoBackplate && params.showMountingPoints && params.letterMounting) {
               const pts = assemblyRef.current.mountingPoints || computeLetterMountingPoints(processedLetters, params);
               for (const pt of pts) {
@@ -1087,12 +1645,22 @@ export default function Speak23D() {
           const allMeshes = scene.children.filter((c): c is THREE.Mesh => c.type === "Mesh");
           if (allMeshes.length > 0) {
             const { min, max } = getBounds(allMeshes);
+            assemblyRef.current.signBounds = { min: min.clone(), max: max.clone() };
             setDims(`${((max.x - min.x) * 1000).toFixed(1)} × ${((max.y - min.y) * 1000).toFixed(1)} × ${((max.z - min.z) * 1000).toFixed(1)} mm`);
             const size = Math.max(max.x - min.x, max.y - min.y, max.z - min.z);
             cameraRef.current!.position.set(0, -size * 0.3, size * 2.5);
             controlsRef.current!.target.set((min.x + max.x) / 2, (min.y + max.y) / 2, (min.z + max.z) / 2);
             controlsRef.current!.update();
           }
+
+          // Add LED visualization
+          addLEDVisualization(scene, assemblyRef.current.letters, params);
+
+          // Update bloom based on LED state
+          if (bloomPassRef.current) {
+            bloomPassRef.current.strength = params.ledOn ? params.ledBrightness * 1.0 : 0;
+          }
+
           setStatus("✅ Model generated");
           setHasGenerated(true);
         } catch (err: unknown) {
@@ -1104,6 +1672,108 @@ export default function Speak23D() {
 
     loadFont(params.font, doGenerate);
   }, [params, clearScene, loadFont]);
+
+  // Preview Installation mode
+  const showPreview = useCallback(() => {
+    if (!sceneRef.current || !hasGenerated || !assemblyRef.current.signBounds) return;
+    clearEnvironment();
+    const scene = sceneRef.current;
+    const bounds = assemblyRef.current.signBounds;
+
+    buildEnvironment(scene, envType, wallTexture, isNight, bounds);
+
+    // Update LED visualization
+    const oldLed = scene.getObjectByName("led_visualization");
+    if (oldLed) scene.remove(oldLed);
+    addLEDVisualization(scene, assemblyRef.current.letters, { ...params, ledOn: isNight ? params.ledOn : params.ledOn });
+
+    if (bloomPassRef.current) {
+      bloomPassRef.current.strength = (params.ledOn && isNight) ? params.ledBrightness * 1.5 : params.ledOn ? params.ledBrightness * 0.5 : 0;
+    }
+
+    // Adjust ambient light for day/night
+    scene.children.forEach(c => {
+      if (c instanceof THREE.AmbientLight) {
+        c.intensity = isNight ? 0.15 : 0.6;
+      }
+      if (c instanceof THREE.DirectionalLight) {
+        c.intensity = isNight ? 0.1 : 1.0;
+      }
+    });
+
+    // Zoom out for environment
+    const size = Math.max(bounds.max.x - bounds.min.x, bounds.max.y - bounds.min.y) * 3;
+    const cx = (bounds.min.x + bounds.max.x) / 2;
+    const cy = (bounds.min.y + bounds.max.y) / 2;
+    cameraRef.current!.position.set(cx + size * 0.3, cy - size * 0.2, size * 1.5);
+    controlsRef.current!.target.set(cx, cy, 0);
+    controlsRef.current!.update();
+  }, [envType, wallTexture, isNight, params, hasGenerated, clearEnvironment]);
+
+  // Export mockup as PNG
+  const exportMockup = useCallback(() => {
+    const renderer = rendererRef.current;
+    const scene = sceneRef.current;
+    const camera = cameraRef.current;
+    if (!renderer || !scene || !camera) return;
+
+    // Render at high res
+    const origW = renderer.domElement.width;
+    const origH = renderer.domElement.height;
+    const scale = 2;
+    renderer.setSize(origW * scale, origH * scale);
+    camera.aspect = origW / origH;
+    camera.updateProjectionMatrix();
+    renderer.render(scene, camera);
+
+    const dataURL = renderer.domElement.toDataURL("image/png");
+
+    // Draw overlay text
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement("canvas");
+      canvas.width = img.width;
+      canvas.height = img.height;
+      const ctx = canvas.getContext("2d")!;
+      ctx.drawImage(img, 0, 0);
+
+      // Overlay bar
+      const barH = 60 * scale;
+      ctx.fillStyle = "rgba(0,0,0,0.7)";
+      ctx.fillRect(0, canvas.height - barH, canvas.width, barH);
+      ctx.fillStyle = "#ffffff";
+      ctx.font = `${14 * scale}px Arial`;
+      const text = params.lines.map(l => l.text).join(" | ");
+      const ledColor = params.ledColorPreset === "custom" ? params.ledCustomColor : LED_COLOR_PRESETS[params.ledColorPreset]?.label || "";
+      const info = `"${text}" — ${dims} — ${FONT_MAP[params.font]?.label || params.font} — LED: ${ledColor}`;
+      ctx.fillText(info, 10 * scale, canvas.height - barH / 2 + 5 * scale);
+      ctx.font = `${10 * scale}px Arial`;
+      ctx.fillStyle = "#888";
+      ctx.fillText("Speak23D by Tonic Thought Studios", 10 * scale, canvas.height - 8 * scale);
+
+      const finalURL = canvas.toDataURL("image/png");
+      const a = document.createElement("a");
+      a.href = finalURL;
+      a.download = `speak23d_mockup_${text.replace(/\s/g, "_")}.png`;
+      a.click();
+    };
+    img.src = dataURL;
+
+    // Restore size
+    renderer.setSize(origW, origH);
+    camera.aspect = origW / origH;
+    camera.updateProjectionMatrix();
+  }, [params, dims]);
+
+  // Generate share link
+  const generateShareLink = useCallback(() => {
+    const link = encodeParamsToURL(params);
+    setShareLink(link);
+    navigator.clipboard.writeText(link).then(() => {
+      setShareCopied(true);
+      setTimeout(() => setShareCopied(false), 2000);
+    });
+  }, [params]);
 
   const downloadFile = useCallback((mesh: THREE.Mesh, name: string, format: "stl" | "3mf") => {
     const blob = format === "stl" ? exportSTL(mesh) : export3MF(mesh);
@@ -1145,6 +1815,8 @@ export default function Speak23D() {
 
   const isNoBackplate = params.backplateShape === "none";
 
+  const getLedColor = () => params.ledColorPreset === "custom" ? params.ledCustomColor : (LED_COLOR_PRESETS[params.ledColorPreset]?.color || "#FFE4B5");
+
   return (
     <div className="flex flex-col lg:flex-row h-screen">
       {/* Controls Panel */}
@@ -1154,203 +1826,420 @@ export default function Speak23D() {
           <p className="text-zinc-500 text-xs mt-0.5">3D Printable Backlit House Numbers & Signs</p>
         </div>
 
-        {/* AI Recommendations */}
-        <AIRecommendationsPanel params={params} />
+        {/* Tab Switcher */}
+        <div className="flex bg-zinc-800 rounded-lg p-1 gap-1">
+          <button
+            onClick={() => setActiveTab("design")}
+            className={`flex-1 py-2 px-3 rounded-md text-xs font-semibold transition-colors ${activeTab === "design" ? "bg-blue-600 text-white" : "text-zinc-400 hover:text-zinc-200"}`}
+          >
+            🎨 Design
+          </button>
+          <button
+            onClick={() => { setActiveTab("preview"); if (hasGenerated) showPreview(); }}
+            className={`flex-1 py-2 px-3 rounded-md text-xs font-semibold transition-colors ${activeTab === "preview" ? "bg-purple-600 text-white" : "text-zinc-400 hover:text-zinc-200"}`}
+          >
+            🏠 Preview Installation
+          </button>
+        </div>
 
-        {/* 📝 Multi-line Text */}
-        <SectionHeader id="multiline" label="Text / Multi-line" icon="📝" />
-        {expandedSections.multiline && (
-          <div className="space-y-2 pl-3 border-l-2 border-purple-500/30">
-            {params.lines.map((line, i) => (
-              <div key={i} className="flex gap-2 items-center">
-                <input
-                  type="text" value={line.text} onChange={(e) => updateLine(i, "text", e.target.value)}
-                  className="flex-1 bg-zinc-800 border border-zinc-700 rounded px-2 py-1.5 text-white font-mono tracking-wider focus:border-blue-500 focus:outline-none"
-                  placeholder={`Line ${i + 1}`} maxLength={20}
+        {activeTab === "design" && (
+          <>
+            {/* AI Recommendations */}
+            <AIRecommendationsPanel params={params} />
+
+            {/* 📝 Multi-line Text */}
+            <SectionHeader id="multiline" label="Text / Multi-line" icon="📝" />
+            {expandedSections.multiline && (
+              <div className="space-y-2 pl-3 border-l-2 border-purple-500/30">
+                {params.lines.map((line, i) => (
+                  <div key={i} className="flex gap-2 items-center">
+                    <input
+                      type="text" value={line.text} onChange={(e) => updateLine(i, "text", e.target.value)}
+                      className="flex-1 bg-zinc-800 border border-zinc-700 rounded px-2 py-1.5 text-white font-mono tracking-wider focus:border-blue-500 focus:outline-none"
+                      placeholder={`Line ${i + 1}`} maxLength={20}
+                    />
+                    <select value={line.align} onChange={(e) => updateLine(i, "align", e.target.value)}
+                      className="bg-zinc-800 border border-zinc-700 rounded px-1 py-1.5 text-white text-xs focus:outline-none w-16">
+                      <option value="left">L</option>
+                      <option value="center">C</option>
+                      <option value="right">R</option>
+                    </select>
+                    {params.lines.length > 1 && (
+                      <button onClick={() => removeLine(i)} className="text-red-400 hover:text-red-300 px-1">✕</button>
+                    )}
+                  </div>
+                ))}
+                <button onClick={addLine} className="text-xs text-blue-400 hover:text-blue-300">+ Add line</button>
+                <Slider label="Line Spacing" value={params.lineSpacingMM} onChange={(v) => updateParam("lineSpacingMM", v)} min={0} max={30} unit="mm" />
+              </div>
+            )}
+
+            {/* 🔤 Font Selection */}
+            <SectionHeader id="font" label="Font" icon="🔤" />
+            {expandedSections.font && (
+              <div className="space-y-2 pl-3 border-l-2 border-pink-500/30">
+                <SelectInput label="Typeface" value={params.font} onChange={(v) => updateParam("font", v)}
+                  options={Object.entries(FONT_MAP).map(([k, v]) => ({ value: k, label: v.label }))}
                 />
-                <select value={line.align} onChange={(e) => updateLine(i, "align", e.target.value)}
-                  className="bg-zinc-800 border border-zinc-700 rounded px-1 py-1.5 text-white text-xs focus:outline-none w-16">
-                  <option value="left">L</option>
-                  <option value="center">C</option>
-                  <option value="right">R</option>
-                </select>
-                {params.lines.length > 1 && (
-                  <button onClick={() => removeLine(i)} className="text-red-400 hover:text-red-300 px-1">✕</button>
+                <button onClick={verifyAllFonts} className="text-xs text-blue-400 hover:text-blue-300 underline">🔍 Verify all fonts</button>
+                {Object.keys(fontTestResults).length > 0 && (
+                  <div className="bg-zinc-800 rounded-lg p-2 space-y-1">
+                    <p className="text-xs font-semibold text-zinc-300 mb-1">Font Test Results:</p>
+                    {Object.entries(FONT_MAP).map(([key, entry]) => (
+                      <div key={key} className="flex items-center gap-2 text-xs">
+                        <span>{fontTestResults[key] ? "✅" : "❌"}</span>
+                        <span className={fontTestResults[key] ? "text-green-400" : "text-red-400"}>{entry.label}</span>
+                      </div>
+                    ))}
+                  </div>
                 )}
               </div>
-            ))}
-            <button onClick={addLine} className="text-xs text-blue-400 hover:text-blue-300">+ Add line</button>
-            <Slider label="Line Spacing" value={params.lineSpacingMM} onChange={(v) => updateParam("lineSpacingMM", v)} min={0} max={30} unit="mm" />
-          </div>
-        )}
-
-        {/* 🔤 Font Selection */}
-        <SectionHeader id="font" label="Font" icon="🔤" />
-        {expandedSections.font && (
-          <div className="space-y-2 pl-3 border-l-2 border-pink-500/30">
-            <SelectInput label="Typeface" value={params.font} onChange={(v) => updateParam("font", v)}
-              options={Object.entries(FONT_MAP).map(([k, v]) => ({ value: k, label: v.label }))}
-            />
-          </div>
-        )}
-
-        {/* 📐 Dimensions */}
-        <SectionHeader id="dimensions" label="Dimensions" icon="📐" />
-        {expandedSections.dimensions && (
-          <div className="space-y-3 pl-3 border-l-2 border-blue-500/30">
-            <Slider label="Text Height" value={params.heightMM} onChange={(v) => updateParam("heightMM", v)} min={50} max={300} unit="mm" />
-            <Slider label="Text Depth" value={params.depthMM} onChange={(v) => updateParam("depthMM", v)} min={5} max={30} unit="mm" />
-            <Slider label="Backplate Padding" value={params.paddingMM} onChange={(v) => updateParam("paddingMM", v)} min={3} max={30} unit="mm" />
-            <Slider label="Wall Thickness" value={params.wallThickMM} onChange={(v) => updateParam("wallThickMM", v)} min={1} max={8} step={0.5} unit="mm" />
-            <Slider label="Scale Factor" value={params.scaleFactor} onChange={(v) => updateParam("scaleFactor", v)} min={0.5} max={3.0} step={0.1} unit="×" />
-          </div>
-        )}
-
-        {/* 🔷 Backplate Shape */}
-        <SectionHeader id="shape" label="Backplate Shape" icon="🔷" />
-        {expandedSections.shape && (
-          <div className="space-y-3 pl-3 border-l-2 border-cyan-500/30">
-            <div className="grid grid-cols-6 gap-1">
-              {([
-                ["rectangle", "▬"],
-                ["rounded_rect", "▢"],
-                ["oval", "⬭"],
-                ["arch", "⌂"],
-                ["auto_contour", "◎"],
-                ["none", "✖"],
-              ] as [BackplateShape, string][]).map(([shape, icon]) => (
-                <button key={shape} onClick={() => updateParam("backplateShape", shape)}
-                  className={`py-2 rounded text-lg transition-colors ${params.backplateShape === shape ? "bg-blue-600 text-white" : "bg-zinc-800 text-zinc-400 hover:bg-zinc-700"}`}
-                  title={shape === "none" ? "No Backplate (floating letters)" : shape.replace("_", " ")}>
-                  {icon}
-                </button>
-              ))}
-            </div>
-            <p className="text-xs text-zinc-500 capitalize">{params.backplateShape === "none" ? "No Backplate (floating letters)" : params.backplateShape.replace("_", " ")}</p>
-            {params.backplateShape === "rounded_rect" && (
-              <Slider label="Corner Radius" value={params.cornerRadiusMM} onChange={(v) => updateParam("cornerRadiusMM", v)} min={2} max={40} unit="mm" />
             )}
-          </div>
-        )}
 
-        {/* 🔩 Mounting */}
-        <SectionHeader id="mounting" label="Mounting" icon="🔩" />
-        {expandedSections.mounting && (
-          <div className="space-y-3 pl-3 border-l-2 border-amber-500/30">
+            {/* 📐 Dimensions */}
+            <SectionHeader id="dimensions" label="Dimensions" icon="📐" />
+            {expandedSections.dimensions && (
+              <div className="space-y-3 pl-3 border-l-2 border-blue-500/30">
+                <Slider label="Text Height" value={params.heightMM} onChange={(v) => updateParam("heightMM", v)} min={50} max={300} unit="mm" />
+                <Slider label="Text Depth" value={params.depthMM} onChange={(v) => updateParam("depthMM", v)} min={5} max={30} unit="mm" />
+                <Slider label="Backplate Padding" value={params.paddingMM} onChange={(v) => updateParam("paddingMM", v)} min={3} max={30} unit="mm" />
+                <Slider label="Wall Thickness" value={params.wallThickMM} onChange={(v) => updateParam("wallThickMM", v)} min={1} max={8} step={0.5} unit="mm" />
+                <Slider label="Scale Factor" value={params.scaleFactor} onChange={(v) => updateParam("scaleFactor", v)} min={0.5} max={3.0} step={0.1} unit="×" />
+              </div>
+            )}
+
+            {/* 🔷 Backplate Shape */}
+            <SectionHeader id="shape" label="Backplate Shape" icon="🔷" />
+            {expandedSections.shape && (
+              <div className="space-y-3 pl-3 border-l-2 border-cyan-500/30">
+                <div className="grid grid-cols-6 gap-1">
+                  {([
+                    ["rectangle", "▬"],
+                    ["rounded_rect", "▢"],
+                    ["oval", "⬭"],
+                    ["arch", "⌂"],
+                    ["auto_contour", "◎"],
+                    ["none", "✖"],
+                  ] as [BackplateShape, string][]).map(([shape, icon]) => (
+                    <button key={shape} onClick={() => updateParam("backplateShape", shape)}
+                      className={`py-2 rounded text-lg transition-colors ${params.backplateShape === shape ? "bg-blue-600 text-white" : "bg-zinc-800 text-zinc-400 hover:bg-zinc-700"}`}
+                      title={shape === "none" ? "No Backplate (floating letters)" : shape.replace("_", " ")}>
+                      {icon}
+                    </button>
+                  ))}
+                </div>
+                <p className="text-xs text-zinc-500 capitalize">{params.backplateShape === "none" ? "No Backplate (floating letters)" : params.backplateShape.replace("_", " ")}</p>
+                {params.backplateShape === "rounded_rect" && (
+                  <Slider label="Corner Radius" value={params.cornerRadiusMM} onChange={(v) => updateParam("cornerRadiusMM", v)} min={2} max={40} unit="mm" />
+                )}
+              </div>
+            )}
+
+            {/* 🔩 Mounting */}
+            <SectionHeader id="mounting" label="Mounting" icon="🔩" />
+            {expandedSections.mounting && (
+              <div className="space-y-3 pl-3 border-l-2 border-amber-500/30">
+                {!isNoBackplate && (
+                  <>
+                    <SelectInput label="Mount Type" value={params.mountType} onChange={(v) => updateParam("mountType", v as MountType)}
+                      options={[
+                        { value: "none", label: "None" },
+                        { value: "2hole", label: "2-Hole (top corners)" },
+                        { value: "4hole", label: "4-Hole (all corners)" },
+                        { value: "french_cleat", label: "French Cleat" },
+                        { value: "keyhole", label: "Keyhole Slots" },
+                      ]}
+                    />
+                    {(params.mountType === "2hole" || params.mountType === "4hole" || params.mountType === "keyhole") && (
+                      <Slider label="Hole Diameter" value={params.holeDiameterMM} onChange={(v) => updateParam("holeDiameterMM", v)} min={3} max={10} step={0.5} unit="mm" />
+                    )}
+                  </>
+                )}
+                {isNoBackplate && (
+                  <>
+                    <div className="flex items-center justify-between bg-zinc-800 rounded-lg px-3 py-2">
+                      <div>
+                        <p className="text-sm font-medium text-zinc-200">Hidden Letter Mounting</p>
+                        <p className="text-xs text-zinc-500">Counterbored screw holes in letters</p>
+                      </div>
+                      <button onClick={() => updateParam("letterMounting", !params.letterMounting)}
+                        className={`relative w-11 h-6 rounded-full transition-colors ${params.letterMounting ? "bg-blue-500" : "bg-zinc-600"}`}>
+                        <span className={`absolute top-0.5 w-5 h-5 rounded-full bg-white transition-transform ${params.letterMounting ? "translate-x-5" : "translate-x-0.5"}`} />
+                      </button>
+                    </div>
+                    <div className="flex items-center justify-between bg-zinc-800 rounded-lg px-3 py-2">
+                      <div>
+                        <p className="text-sm font-medium text-zinc-200">Show Mounting Points</p>
+                        <p className="text-xs text-zinc-500">Highlight holes in red in preview</p>
+                      </div>
+                      <button onClick={() => updateParam("showMountingPoints", !params.showMountingPoints)}
+                        className={`relative w-11 h-6 rounded-full transition-colors ${params.showMountingPoints ? "bg-red-500" : "bg-zinc-600"}`}>
+                        <span className={`absolute top-0.5 w-5 h-5 rounded-full bg-white transition-transform ${params.showMountingPoints ? "translate-x-5" : "translate-x-0.5"}`} />
+                      </button>
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
+
+            {/* Housing / LED toggle */}
             {!isNoBackplate && (
+              <div className="flex items-center justify-between bg-zinc-800 rounded-lg px-4 py-2.5">
+                <div>
+                  <p className="text-sm font-medium text-zinc-200">Full Housing</p>
+                  <p className="text-xs text-zinc-500">Face + back + LED channels</p>
+                </div>
+                <button onClick={() => updateParam("housing", !params.housing)}
+                  className={`relative w-11 h-6 rounded-full transition-colors ${params.housing ? "bg-blue-500" : "bg-zinc-600"}`}>
+                  <span className={`absolute top-0.5 w-5 h-5 rounded-full bg-white transition-transform ${params.housing ? "translate-x-5" : "translate-x-0.5"}`} />
+                </button>
+              </div>
+            )}
+
+            {params.housing && !isNoBackplate && (
               <>
-                <SelectInput label="Mount Type" value={params.mountType} onChange={(v) => updateParam("mountType", v as MountType)}
-                  options={[
-                    { value: "none", label: "None" },
-                    { value: "2hole", label: "2-Hole (top corners)" },
-                    { value: "4hole", label: "4-Hole (all corners)" },
-                    { value: "french_cleat", label: "French Cleat" },
-                    { value: "keyhole", label: "Keyhole Slots" },
-                  ]}
-                />
-                {(params.mountType === "2hole" || params.mountType === "4hole" || params.mountType === "keyhole") && (
-                  <Slider label="Hole Diameter" value={params.holeDiameterMM} onChange={(v) => updateParam("holeDiameterMM", v)} min={3} max={10} step={0.5} unit="mm" />
+                <SectionHeader id="led" label="LED & Options" icon="💡" />
+                {expandedSections.led && (
+                  <div className="space-y-3 pl-3 border-l-2 border-green-500/30">
+                    <SelectInput label="LED Type" value={params.ledType} onChange={(v) => updateParam("ledType", v as Params["ledType"])}
+                      options={[
+                        { value: "strip_5v", label: "LED Strip 5V (12mm)" },
+                        { value: "strip_12v", label: "LED Strip 12V (10mm)" },
+                        { value: "cob", label: "COB LED (8mm)" },
+                      ]}
+                    />
+                    <SelectInput label="Reflector" value={params.reflector} onChange={(v) => updateParam("reflector", v as Params["reflector"])}
+                      options={[
+                        { value: "none", label: "None" },
+                        { value: "parabolic", label: "Parabolic" },
+                        { value: "faceted", label: "Faceted" },
+                      ]}
+                    />
+                  </div>
                 )}
               </>
             )}
-            {isNoBackplate && (
-              <>
-                <div className="flex items-center justify-between bg-zinc-800 rounded-lg px-3 py-2">
-                  <div>
-                    <p className="text-sm font-medium text-zinc-200">Hidden Letter Mounting</p>
-                    <p className="text-xs text-zinc-500">Counterbored screw holes in letters</p>
+
+            {/* 💡 LED Visualization Controls */}
+            <SectionHeader id="ledviz" label="LED Visualization" icon="💡" />
+            {expandedSections.ledviz && (
+              <div className="space-y-3 pl-3 border-l-2 border-yellow-500/30">
+                {/* LED On/Off Toggle - prominent light switch */}
+                <button
+                  onClick={() => updateParam("ledOn", !params.ledOn)}
+                  className={`w-full flex items-center justify-center gap-3 py-3 rounded-lg text-lg font-bold transition-all ${params.ledOn
+                      ? "bg-gradient-to-r from-yellow-500 to-orange-500 text-black shadow-lg shadow-yellow-500/30"
+                      : "bg-zinc-800 text-zinc-500 border border-zinc-700"
+                    }`}
+                >
+                  <span className="text-2xl">{params.ledOn ? "💡" : "🌑"}</span>
+                  <span>{params.ledOn ? "LEDs ON" : "LEDs OFF"}</span>
+                </button>
+
+                {/* LED Color Preset */}
+                <div>
+                  <label className="block text-sm font-medium text-zinc-300 mb-2">LED Color</label>
+                  <div className="grid grid-cols-3 gap-1.5">
+                    {Object.entries(LED_COLOR_PRESETS).map(([key, preset]) => (
+                      <button
+                        key={key}
+                        onClick={() => updateParam("ledColorPreset", key)}
+                        className={`flex items-center gap-1.5 px-2 py-1.5 rounded text-xs transition-colors ${params.ledColorPreset === key ? "ring-2 ring-blue-400 bg-zinc-700" : "bg-zinc-800 hover:bg-zinc-700"}`}
+                      >
+                        <span
+                          className="w-3 h-3 rounded-full border border-zinc-600"
+                          style={{ backgroundColor: preset.color }}
+                        />
+                        <span className="text-zinc-300">{preset.label}</span>
+                      </button>
+                    ))}
                   </div>
-                  <button onClick={() => updateParam("letterMounting", !params.letterMounting)}
-                    className={`relative w-11 h-6 rounded-full transition-colors ${params.letterMounting ? "bg-blue-500" : "bg-zinc-600"}`}>
-                    <span className={`absolute top-0.5 w-5 h-5 rounded-full bg-white transition-transform ${params.letterMounting ? "translate-x-5" : "translate-x-0.5"}`} />
-                  </button>
                 </div>
-                <div className="flex items-center justify-between bg-zinc-800 rounded-lg px-3 py-2">
-                  <div>
-                    <p className="text-sm font-medium text-zinc-200">Show Mounting Points</p>
-                    <p className="text-xs text-zinc-500">Highlight holes in red in preview</p>
+
+                {/* Custom color picker */}
+                {params.ledColorPreset === "custom" && (
+                  <div className="flex items-center gap-2">
+                    <label className="text-sm text-zinc-300">Custom:</label>
+                    <input
+                      type="color"
+                      value={params.ledCustomColor}
+                      onChange={(e) => updateParam("ledCustomColor", e.target.value)}
+                      className="w-10 h-8 rounded cursor-pointer bg-transparent border-0"
+                    />
+                    <span className="text-xs text-zinc-400 font-mono">{params.ledCustomColor}</span>
                   </div>
-                  <button onClick={() => updateParam("showMountingPoints", !params.showMountingPoints)}
-                    className={`relative w-11 h-6 rounded-full transition-colors ${params.showMountingPoints ? "bg-red-500" : "bg-zinc-600"}`}>
-                    <span className={`absolute top-0.5 w-5 h-5 rounded-full bg-white transition-transform ${params.showMountingPoints ? "translate-x-5" : "translate-x-0.5"}`} />
-                  </button>
+                )}
+
+                {/* LED Brightness */}
+                <Slider
+                  label="LED Brightness"
+                  value={Math.round(params.ledBrightness * 100)}
+                  onChange={(v) => updateParam("ledBrightness", v / 100)}
+                  min={10} max={100} unit="%"
+                />
+
+                {/* LED color preview swatch */}
+                <div className="flex items-center gap-2 bg-zinc-800 rounded-lg px-3 py-2">
+                  <div
+                    className="w-8 h-8 rounded-full border-2 border-zinc-600"
+                    style={{
+                      backgroundColor: params.ledOn ? getLedColor() : "#111",
+                      boxShadow: params.ledOn ? `0 0 ${params.ledBrightness * 20}px ${getLedColor()}` : "none"
+                    }}
+                  />
+                  <span className="text-xs text-zinc-400">
+                    {params.ledOn ? `Glowing ${LED_COLOR_PRESETS[params.ledColorPreset]?.label || "Custom"}` : "LEDs off"}
+                  </span>
                 </div>
-              </>
+              </div>
             )}
-          </div>
-        )}
 
-        {/* Housing / LED toggle */}
-        {!isNoBackplate && (
-          <div className="flex items-center justify-between bg-zinc-800 rounded-lg px-4 py-2.5">
-            <div>
-              <p className="text-sm font-medium text-zinc-200">Full Housing</p>
-              <p className="text-xs text-zinc-500">Face + back + LED channels</p>
-            </div>
-            <button onClick={() => updateParam("housing", !params.housing)}
-              className={`relative w-11 h-6 rounded-full transition-colors ${params.housing ? "bg-blue-500" : "bg-zinc-600"}`}>
-              <span className={`absolute top-0.5 w-5 h-5 rounded-full bg-white transition-transform ${params.housing ? "translate-x-5" : "translate-x-0.5"}`} />
+            {/* Generate */}
+            <button onClick={generate} disabled={generating || !fontLoaded}
+              className="w-full py-3 rounded-lg font-semibold text-white bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all mt-2">
+              {generating ? "⏳ Generating..." : "🚀 Generate 3D Model"}
             </button>
-          </div>
-        )}
 
-        {params.housing && !isNoBackplate && (
-          <>
-            <SectionHeader id="led" label="LED & Options" icon="💡" />
-            {expandedSections.led && (
-              <div className="space-y-3 pl-3 border-l-2 border-green-500/30">
-                <SelectInput label="LED Type" value={params.ledType} onChange={(v) => updateParam("ledType", v as Params["ledType"])}
-                  options={[
-                    { value: "strip_5v", label: "LED Strip 5V (12mm)" },
-                    { value: "strip_12v", label: "LED Strip 12V (10mm)" },
-                    { value: "cob", label: "COB LED (8mm)" },
-                  ]}
-                />
-                <SelectInput label="Reflector" value={params.reflector} onChange={(v) => updateParam("reflector", v as Params["reflector"])}
-                  options={[
-                    { value: "none", label: "None" },
-                    { value: "parabolic", label: "Parabolic" },
-                    { value: "faceted", label: "Faceted" },
-                  ]}
-                />
+            <p className="text-xs text-zinc-400">{status}</p>
+            {dims && <p className="text-xs text-zinc-300">📐 <span className="font-mono text-blue-400">{dims}</span></p>}
+
+            {/* Downloads */}
+            {hasGenerated && (assemblyRef.current.face || assemblyRef.current.letters.length > 0) && (
+              <div className="space-y-1.5">
+                <h3 className="text-xs font-semibold text-zinc-400 uppercase tracking-wide">Downloads</h3>
+                {assemblyRef.current.face ? (
+                  <>
+                    <DownloadBtn label="Face Plate" onSTL={() => downloadFile(assemblyRef.current.face!, "face_plate", "stl")} on3MF={() => downloadFile(assemblyRef.current.face!, "face_plate", "3mf")} />
+                    <DownloadBtn label="Back Plate" onSTL={() => downloadFile(assemblyRef.current.back!, "back_plate", "stl")} on3MF={() => downloadFile(assemblyRef.current.back!, "back_plate", "3mf")} />
+                    {assemblyRef.current.cleat && <DownloadBtn label="Wall Cleat" onSTL={() => downloadFile(assemblyRef.current.cleat!, "wall_cleat", "stl")} on3MF={() => downloadFile(assemblyRef.current.cleat!, "wall_cleat", "3mf")} />}
+                    {assemblyRef.current.diffuser && <DownloadBtn label="Diffuser" onSTL={() => downloadFile(assemblyRef.current.diffuser!, "diffuser", "stl")} on3MF={() => downloadFile(assemblyRef.current.diffuser!, "diffuser", "3mf")} />}
+                  </>
+                ) : (
+                  assemblyRef.current.letters.map((l, i) => (
+                    <DownloadBtn key={i} label={`Letter ${l.userData?.char || i + 1}`} onSTL={() => downloadFile(l, `letter_${i}`, "stl")} on3MF={() => downloadFile(l, `letter_${i}`, "3mf")} />
+                  ))
+                )}
+                {isNoBackplate && params.letterMounting && mountingPoints.length > 0 && (
+                  <button onClick={downloadSVGTemplate}
+                    className="w-full flex items-center gap-2 bg-amber-900/30 border border-amber-500/20 rounded-lg px-3 py-2 text-sm text-amber-300 hover:bg-amber-900/50 transition-colors">
+                    <span>📐</span>
+                    <span className="flex-1 text-left">Download Drilling Template (SVG)</span>
+                  </button>
+                )}
+              </div>
+            )}
+
+            {/* Export & Share */}
+            {hasGenerated && (
+              <div className="space-y-2">
+                <h3 className="text-xs font-semibold text-zinc-400 uppercase tracking-wide">Share & Export</h3>
+                <button onClick={exportMockup}
+                  className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-semibold text-sm transition-all">
+                  📸 Export Mockup (PNG)
+                </button>
+                <button onClick={generateShareLink}
+                  className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg bg-zinc-800 border border-zinc-700 hover:bg-zinc-700 text-white font-semibold text-sm transition-all">
+                  {shareCopied ? "✅ Copied!" : "🔗 Copy Share Link"}
+                </button>
+                {shareLink && (
+                  <div className="bg-zinc-800 rounded-lg p-2">
+                    <input type="text" value={shareLink} readOnly
+                      className="w-full bg-zinc-900 border border-zinc-700 rounded px-2 py-1 text-xs text-zinc-400 font-mono"
+                      onClick={(e) => (e.target as HTMLInputElement).select()}
+                    />
+                  </div>
+                )}
               </div>
             )}
           </>
         )}
 
-        {/* Generate */}
-        <button onClick={generate} disabled={generating || !fontLoaded}
-          className="w-full py-3 rounded-lg font-semibold text-white bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all mt-2">
-          {generating ? "⏳ Generating..." : "🚀 Generate 3D Model"}
-        </button>
-
-        <p className="text-xs text-zinc-400">{status}</p>
-        {dims && <p className="text-xs text-zinc-300">📐 <span className="font-mono text-blue-400">{dims}</span></p>}
-
-        {/* Downloads */}
-        {hasGenerated && (assemblyRef.current.face || assemblyRef.current.letters.length > 0) && (
-          <div className="space-y-1.5">
-            <h3 className="text-xs font-semibold text-zinc-400 uppercase tracking-wide">Downloads</h3>
-            {assemblyRef.current.face ? (
-              <>
-                <DownloadBtn label="Face Plate" onSTL={() => downloadFile(assemblyRef.current.face!, "face_plate", "stl")} on3MF={() => downloadFile(assemblyRef.current.face!, "face_plate", "3mf")} />
-                <DownloadBtn label="Back Plate" onSTL={() => downloadFile(assemblyRef.current.back!, "back_plate", "stl")} on3MF={() => downloadFile(assemblyRef.current.back!, "back_plate", "3mf")} />
-                {assemblyRef.current.cleat && <DownloadBtn label="Wall Cleat" onSTL={() => downloadFile(assemblyRef.current.cleat!, "wall_cleat", "stl")} on3MF={() => downloadFile(assemblyRef.current.cleat!, "wall_cleat", "3mf")} />}
-                {assemblyRef.current.diffuser && <DownloadBtn label="Diffuser" onSTL={() => downloadFile(assemblyRef.current.diffuser!, "diffuser", "stl")} on3MF={() => downloadFile(assemblyRef.current.diffuser!, "diffuser", "3mf")} />}
-              </>
+        {activeTab === "preview" && (
+          <>
+            {!hasGenerated ? (
+              <div className="text-center py-8">
+                <p className="text-zinc-400 text-sm">Generate a model first in the Design tab</p>
+                <button onClick={() => setActiveTab("design")}
+                  className="mt-3 px-4 py-2 bg-blue-600 rounded-lg text-sm hover:bg-blue-500">
+                  ← Go to Design
+                </button>
+              </div>
             ) : (
-              assemblyRef.current.letters.map((l, i) => (
-                <DownloadBtn key={i} label={`Letter ${l.userData?.char || i + 1}`} onSTL={() => downloadFile(l, `letter_${i}`, "stl")} on3MF={() => downloadFile(l, `letter_${i}`, "3mf")} />
-              ))
+              <>
+                {/* Environment Selection */}
+                <div className="space-y-2">
+                  <h3 className="text-sm font-semibold text-zinc-200">Environment</h3>
+                  <div className="grid grid-cols-1 gap-1.5">
+                    {Object.entries(ENVIRONMENT_PRESETS).map(([key, preset]) => (
+                      <button
+                        key={key}
+                        onClick={() => { setEnvType(key as EnvironmentType); }}
+                        className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-colors ${envType === key ? "bg-purple-600 text-white" : "bg-zinc-800 text-zinc-300 hover:bg-zinc-700"}`}
+                      >
+                        <span className="text-lg">{preset.icon}</span>
+                        <span>{preset.label}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Wall Texture (for house wall) */}
+                {envType === "house_wall" && (
+                  <div className="space-y-2">
+                    <h3 className="text-sm font-semibold text-zinc-200">Wall Texture</h3>
+                    <div className="grid grid-cols-2 gap-1.5">
+                      {([
+                        ["brick", "🧱 Brick"],
+                        ["wood_siding", "🪵 Wood Siding"],
+                        ["stucco", "🏠 Stucco"],
+                        ["modern_render", "⬜ Modern Render"],
+                      ] as [WallTexture, string][]).map(([tex, label]) => (
+                        <button
+                          key={tex}
+                          onClick={() => setWallTexture(tex)}
+                          className={`px-3 py-2 rounded-lg text-xs transition-colors ${wallTexture === tex ? "bg-purple-600 text-white" : "bg-zinc-800 text-zinc-300 hover:bg-zinc-700"}`}
+                        >
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Day/Night Toggle */}
+                <button
+                  onClick={() => setIsNight(!isNight)}
+                  className={`w-full flex items-center justify-center gap-3 py-3 rounded-lg text-lg font-bold transition-all ${isNight
+                      ? "bg-gradient-to-r from-indigo-900 to-purple-900 text-blue-200 border border-indigo-500/30"
+                      : "bg-gradient-to-r from-amber-400 to-yellow-400 text-yellow-900"
+                    }`}
+                >
+                  <span className="text-2xl">{isNight ? "🌙" : "☀️"}</span>
+                  <span>{isNight ? "Night Mode" : "Day Mode"}</span>
+                </button>
+
+                {/* Apply Preview */}
+                <button
+                  onClick={showPreview}
+                  className="w-full py-3 rounded-lg font-semibold text-white bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 transition-all"
+                >
+                  🎬 Update Preview
+                </button>
+
+                {/* Export from preview */}
+                <div className="space-y-2 mt-3">
+                  <button onClick={exportMockup}
+                    className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-semibold text-sm">
+                    📸 Export Mockup (PNG)
+                  </button>
+                  <button onClick={generateShareLink}
+                    className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg bg-zinc-800 border border-zinc-700 hover:bg-zinc-700 text-white font-semibold text-sm">
+                    {shareCopied ? "✅ Copied!" : "🔗 Copy Share Link"}
+                  </button>
+                </div>
+              </>
             )}
-            {isNoBackplate && params.letterMounting && mountingPoints.length > 0 && (
-              <button onClick={downloadSVGTemplate}
-                className="w-full flex items-center gap-2 bg-amber-900/30 border border-amber-500/20 rounded-lg px-3 py-2 text-sm text-amber-300 hover:bg-amber-900/50 transition-colors">
-                <span>📐</span>
-                <span className="flex-1 text-left">Download Drilling Template (SVG)</span>
-              </button>
-            )}
-          </div>
+          </>
         )}
 
         <div className="mt-auto pt-3 border-t border-zinc-800">
@@ -1363,6 +2252,11 @@ export default function Speak23D() {
         <div className="absolute top-4 left-4 bg-zinc-900/80 backdrop-blur rounded-lg px-3 py-1.5 text-xs text-zinc-400">
           🖱️ Drag to rotate · Scroll to zoom · Right-click to pan
         </div>
+        {activeTab === "preview" && (
+          <div className="absolute top-4 right-4 bg-zinc-900/80 backdrop-blur rounded-lg px-3 py-1.5 text-xs text-purple-300">
+            🏠 Preview Installation Mode
+          </div>
+        )}
       </div>
     </div>
   );
