@@ -55,6 +55,10 @@ html,body{width:100%;height:100%;overflow:hidden;background:#000;font-family:'In
 .s9-sub{font-size:clamp(1rem,3vw,1.5rem);font-weight:300;opacity:.7;margin-bottom:2rem}
 .s9-btn{background:none;border:1px solid rgba(255,215,0,.4);color:#ffd700;padding:.8rem 2rem;border-radius:999px;font-size:1rem;font-family:'Inter',sans-serif;cursor:pointer;transition:all .3s}
 .s9-btn:hover{background:rgba(255,215,0,.1);border-color:#ffd700}
+.smash-container{position:relative;width:100%;height:100%;display:flex;align-items:center;justify-content:center}
+.smash-word{position:absolute;font-weight:900;color:var(--gold);opacity:0;transform:scale(1.4);transition:opacity .12s ease,transform .12s ease;text-align:center;text-transform:uppercase;letter-spacing:.08em;font-size:clamp(1.8rem,6vw,3.5rem)}
+.smash-word.on{opacity:1;transform:scale(1)}
+.smash-word.big{color:#fff;font-size:clamp(2.5rem,8vw,5rem)}
 </style>
 </head>
 <body>
@@ -83,6 +87,9 @@ html,body{width:100%;height:100%;overflow:hidden;background:#000;font-family:'In
   <div class="s8-line" id="ni3">Just a browser.</div>
 </div>
 <div class="scene" id="s8">
+  <div class="smash-container" id="smashContainer"></div>
+</div>
+<div class="scene" id="s9">
   <div class="s9-url">speak23d.vercel.app</div>
   <div class="s9-sub">Built for builders.</div>
   <button class="s9-btn" onclick="replay()">▶ Watch Again</button>
@@ -91,7 +98,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:#000;font-family:'In
 <script>
 const scenes=document.querySelectorAll('.scene');
 const progress=document.getElementById('progress');
-const FADE=400,GAP=500,TOTAL=35500;
+const FADE=400,GAP=500,TOTAL=40000;
 let startTime=0,progressRAF=0,timeouts=[];
 
 const timeline=[
@@ -103,7 +110,8 @@ const timeline=[
   {id:5,start:20000,dur:3500},
   {id:6,start:24000,dur:3500},
   {id:7,start:28000,dur:3000},
-  {id:8,start:31500,dur:4000}
+  {id:8,start:31500,dur:4500},
+  {id:9,start:36500,dur:4000}
 ];
 
 function showScene(i){
@@ -113,6 +121,7 @@ function showScene(i){
   if(i===2)typeAnimation();
   if(i===3)featureHighlight();
   if(i===7)noInstallReveal();
+  if(i===8)smashCut();
 }
 function hideScene(i){
   scenes[i].style.opacity='0';
@@ -134,6 +143,30 @@ function featureHighlight(){
 function noInstallReveal(){
   ['ni1','ni2','ni3'].forEach((id,i)=>{
     timeouts.push(setTimeout(()=>{document.getElementById(id).style.opacity='1'},i*800));
+  });
+}
+
+function smashCut(){
+  const words=[
+    'House Numbers','Script Fonts','LED Glow','Night Mode',
+    'Arch Backplate','French Cleat','Hidden Mounting','Drilling Template',
+    'Rock Mount','Fence Post','Mailbox','Freestanding',
+    '.STL Export','.3MF Export','Share Links','AI Recommendations',
+    'Bambu Ready','SPEAK23D'
+  ];
+  const container=document.getElementById('smashContainer');
+  container.innerHTML='';
+  words.forEach((w,i)=>{
+    const el=document.createElement('div');
+    el.className='smash-word'+(i===words.length-1?' big':'');
+    el.textContent=w;
+    container.appendChild(el);
+    const showAt=i*220;
+    const hideAt=showAt+200;
+    timeouts.push(setTimeout(()=>{el.classList.add('on')},showAt));
+    if(i<words.length-1){
+      timeouts.push(setTimeout(()=>{el.classList.remove('on')},hideAt));
+    }
   });
 }
 
