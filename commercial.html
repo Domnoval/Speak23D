@@ -3,228 +3,171 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>SPEAK23D — Commercial</title>
+<title>SPEAK23D</title>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700;900&display=swap" rel="stylesheet">
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
-:root{--gold:#c9a84c;--dark:#000;--total:35s}
-body{background:var(--dark);color:#fff;font-family:'Inter',sans-serif;overflow:hidden;height:100vh;width:100vw;position:relative}
-
-/* Film grain overlay */
-body::after{content:'';position:fixed;inset:0;z-index:100;pointer-events:none;opacity:.04;background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E")}
-
-.scene{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;flex-direction:column;opacity:0;text-align:center;padding:1.5rem;will-change:opacity,transform}
-
-/* Scene timing: each has fade-in, hold, fade-out with black gaps
-   0-4s: S1 (in 0-0.6, hold, out 3.4-4.0)
-   4-6s: S2 (in 4.3-4.9, hold, out 5.4-6.0)
-   6-11s: S3 (in 6.3-6.9, hold, out 10.4-11.0)
-   11-14s: S4 (in 11.3-11.9, hold, out 13.4-14.0)
-   14-18s: S5 (in 14.3-14.9, hold, out 17.4-18.0)
-   18-22s: S6 (in 18.3-18.9, hold, out 21.4-22.0)
-   22-26s: S7 (in 22.3-22.9, hold, out 25.4-26.0)
-   26-30s: S8 (in 26.3-26.9, hold, out 29.4-30.0)
-   30-35s: S9 (in 30.3-30.9, hold)
-*/
-
-@keyframes s1{0%,1.7%{opacity:0;transform:scale(.97) translateY(12px)}3.4%{opacity:1;transform:scale(1) translateY(0)}9.1%{opacity:1}11.4%,100%{opacity:0}}
-@keyframes s2{0%,12.3%{opacity:0;transform:scale(.97)}14%{opacity:1;transform:scale(1)}15.4%{opacity:1}17.1%,100%{opacity:0}}
-@keyframes s3{0%,18%{opacity:0;transform:scale(.97)}19.7%{opacity:1;transform:scale(1)}29.7%{opacity:1}31.4%,100%{opacity:0}}
-@keyframes s4{0%,32.3%{opacity:0;transform:scale(.97)}34%{opacity:1;transform:scale(1)}38.3%{opacity:1}40%,100%{opacity:0}}
-@keyframes s5{0%,40.9%{opacity:0;transform:scale(.97)}42.6%{opacity:1;transform:scale(1)}49.7%{opacity:1}51.4%,100%{opacity:0}}
-@keyframes s6{0%,52.3%{opacity:0;transform:scale(.97)}54%{opacity:1;transform:scale(1)}61.1%{opacity:1}62.9%,100%{opacity:0}}
-@keyframes s7{0%,63.7%{opacity:0;transform:scale(.97)}65.4%{opacity:1;transform:scale(1)}72.6%{opacity:1}74.3%,100%{opacity:0}}
-@keyframes s8{0%,75.1%{opacity:0;transform:scale(.97)}76.9%{opacity:1;transform:scale(1)}84%{opacity:1}85.7%,100%{opacity:0}}
-@keyframes s9{0%,86.6%{opacity:0;transform:scale(.97)}88.3%{opacity:1;transform:scale(1)}100%{opacity:1}}
-
-#s1{animation:s1 var(--total) linear both}
-#s2{animation:s2 var(--total) linear both}
-#s3{animation:s3 var(--total) linear both}
-#s4{animation:s4 var(--total) linear both}
-#s5{animation:s5 var(--total) linear both}
-#s6{animation:s6 var(--total) linear both}
-#s7{animation:s7 var(--total) linear both}
-#s8{animation:s8 var(--total) linear both}
-#s9{animation:s9 var(--total) linear both}
-
-/* S1: SPEAK23D */
-#s1 h1{font-size:clamp(3.5rem,14vw,9rem);font-weight:900;color:var(--gold);letter-spacing:.15em}
-
-/* S2: Tagline */
-#s2 p{font-size:clamp(1.2rem,4vw,2.2rem);font-weight:300;color:#ccc;letter-spacing:.06em}
-
-/* S3: Typing demo */
-.mock-input{background:#0a0a0a;border:1px solid #222;border-radius:10px;padding:1.2rem 1.8rem;width:min(90vw,480px);text-align:left;position:relative}
-.mock-input .label{font-size:.7rem;color:#555;text-transform:uppercase;letter-spacing:.12em;margin-bottom:.6rem}
-.typed-text{font-size:clamp(1.8rem,6vw,3rem);font-weight:700;color:var(--gold);overflow:hidden;white-space:nowrap;width:0;border-right:2px solid var(--gold);display:inline-block}
-@keyframes typeIn{0%{width:0}100%{width:5.5ch}}
-@keyframes cursorBlink{0%,100%{border-color:var(--gold)}50%{border-color:transparent}}
-.typed-text{animation:typeIn 1.8s 7s steps(5) both,cursorBlink .6s step-end 7s infinite}
-
-.demo-3d{margin-top:2rem;perspective:800px}
-.demo-3d-inner{position:relative;display:inline-block;transform:rotateX(10deg) rotateY(-5deg);transform-style:preserve-3d;opacity:0;animation:fadeScale .8s 9s both}
-@keyframes fadeScale{0%{opacity:0;transform:rotateX(10deg) rotateY(-5deg) scale(.9)}100%{opacity:1;transform:rotateX(10deg) rotateY(-5deg) scale(1)}}
-.demo-3d-layer{font-size:clamp(2.2rem,7vw,4rem);font-weight:900;position:absolute;top:0;left:0;white-space:nowrap}
-.demo-3d-front{color:var(--gold);position:relative;font-size:clamp(2.2rem,7vw,4rem);font-weight:900}
-.demo-3d-layer:nth-child(1){color:#8a6c2e;transform:translateZ(-1px)}
-.demo-3d-layer:nth-child(2){color:#7a5f28;transform:translateZ(-2px)}
-.demo-3d-layer:nth-child(3){color:#6a5222;transform:translateZ(-3px)}
-.demo-3d-layer:nth-child(4){color:#5a451c;transform:translateZ(-4px)}
-.demo-3d-layer:nth-child(5){color:#4a3816;transform:translateZ(-5px)}
-.demo-3d-layer:nth-child(6){color:#3a2b10;transform:translateZ(-6px)}
-.demo-3d-layer:nth-child(7){color:#2a1e0a;transform:translateZ(-8px)}
-.demo-3d-layer:nth-child(8){color:#1a1104;transform:translateZ(-10px)}
-
-/* S4: Features */
-.features-row{display:flex;gap:clamp(1rem,4vw,3rem);align-items:center;flex-wrap:wrap;justify-content:center}
-.feat-item{font-size:clamp(1.1rem,3.5vw,1.8rem);font-weight:600;color:#555;transition:color .4s}
-.feat-sep{color:#333;font-size:1.2rem}
-@keyframes lightUp{0%{color:#555}100%{color:var(--gold);text-shadow:0 0 20px rgba(201,168,76,.3)}}
-.feat-item:nth-child(1){animation:lightUp .5s 12s both}
-.feat-item:nth-child(3){animation:lightUp .5s 12.6s both}
-.feat-item:nth-child(5){animation:lightUp .5s 13.2s both}
-
-/* S5: Environment preview */
-.env-frame{width:min(85vw,420px);aspect-ratio:4/3;background:#0a0a0a;border:1px solid #1a1a1a;border-radius:12px;position:relative;display:flex;align-items:center;justify-content:center;overflow:hidden}
-.env-glow{position:absolute;width:200px;height:200px;background:radial-gradient(circle,rgba(201,168,76,.15) 0%,transparent 70%);border-radius:50%;animation:envPulse 2s ease-in-out infinite}
-@keyframes envPulse{0%,100%{opacity:.6;transform:scale(1)}50%{opacity:1;transform:scale(1.1)}}
-.env-num{font-size:clamp(4rem,14vw,7rem);font-weight:900;color:#e0d5c0;position:relative;z-index:1;letter-spacing:.05em}
-.env-label{margin-top:1.2rem;font-size:clamp(.85rem,2.5vw,1.1rem);color:#666;font-weight:300}
-
-/* S6: Export flow */
-.export-pipeline{display:flex;align-items:center;gap:clamp(.8rem,3vw,1.8rem);flex-wrap:wrap;justify-content:center}
-.export-icon{width:48px;height:48px;position:relative}
-/* 3D model icon - cube */
-.icon-cube{width:40px;height:40px;border:2px solid var(--gold);transform:rotate(45deg) skewX(-10deg) skewY(-10deg);position:relative}
-.icon-cube::before{content:'';position:absolute;top:-10px;left:-1px;width:100%;height:10px;background:var(--gold);transform:skewX(45deg);opacity:.6}
-.icon-cube::after{content:'';position:absolute;top:-1px;right:-10px;width:10px;height:100%;background:var(--gold);transform:skewY(45deg);opacity:.4}
-/* Arrow */
-.export-arrow{color:var(--gold);font-size:1.5rem;font-weight:300;opacity:0}
-@keyframes arrowIn{0%{opacity:0;transform:translateX(-8px)}100%{opacity:1;transform:translateX(0)}}
-.export-arrow:nth-of-type(1){animation:arrowIn .4s 19s both}
-.export-arrow:nth-of-type(2){animation:arrowIn .4s 20s both}
-/* Badge */
-.format-badge{background:#111;border:1px solid var(--gold);border-radius:6px;padding:.5rem 1rem;font-weight:700;color:var(--gold);font-size:1.1rem;opacity:0;animation:fadeIn .4s 19.4s both}
-/* Printer icon */
-.icon-printer{width:44px;height:32px;border:2px solid var(--gold);border-radius:4px 4px 0 0;position:relative;opacity:0;animation:fadeIn .4s 20.4s both}
-.icon-printer::before{content:'';position:absolute;bottom:-12px;left:4px;right:4px;height:12px;border:2px solid var(--gold);border-top:none;border-radius:0 0 2px 2px}
-.icon-printer::after{content:'';position:absolute;top:-8px;left:8px;right:8px;height:8px;border:2px solid var(--gold);border-bottom:none;border-radius:2px 2px 0 0}
-@keyframes fadeIn{0%{opacity:0}100%{opacity:1}}
-
-/* S7: Share */
-.share-url-bar{background:#0d0d0d;border:1px solid #222;border-radius:24px;padding:.7rem 1.4rem;display:inline-flex;align-items:center;gap:.8rem;margin-top:1.5rem}
-.url-dots{display:flex;gap:5px}
-.url-dots span{width:8px;height:8px;border-radius:50%;background:#333}
-.url-text{color:var(--gold);font-size:clamp(.75rem,2vw,.95rem);font-weight:500;letter-spacing:.02em}
-#s7 h2{font-size:clamp(1.3rem,4vw,2rem);font-weight:500;color:#ddd;line-height:1.5;max-width:480px}
-
-/* S8: No install */
-#s8 .line{font-size:clamp(1.4rem,5vw,2.6rem);font-weight:600;color:#fff;line-height:1.6;opacity:0}
-#s8 .line span{color:var(--gold)}
-@keyframes lineIn{0%{opacity:0;transform:translateY(10px)}100%{opacity:1;transform:translateY(0)}}
-#s8 .line:nth-child(1){animation:lineIn .5s 26.8s both}
-#s8 .line:nth-child(2){animation:lineIn .5s 27.6s both}
-#s8 .line:nth-child(3){animation:lineIn .5s 28.4s both}
-
-/* S9: CTA */
-#s9 h1{font-size:clamp(1.8rem,7vw,4rem);font-weight:900;color:var(--gold);letter-spacing:.03em}
-#s9 .subtitle{font-size:clamp(1rem,3vw,1.4rem);color:#777;margin-top:.8rem;font-weight:300;font-style:italic}
-.replay-btn{opacity:0;animation:fadeIn .5s 33s both;margin-top:2.5rem;color:#555;font-size:.85rem;cursor:pointer;border:1px solid #333;padding:.6rem 1.5rem;border-radius:24px;background:transparent;font-family:inherit;letter-spacing:.04em;transition:all .3s}
-.replay-btn:hover{color:var(--gold);border-color:var(--gold)}
-
+html,body{width:100%;height:100%;overflow:hidden;background:#000;font-family:'Inter',sans-serif;color:#fff}
+.scene{position:fixed;inset:0;display:none;opacity:0;flex-direction:column;align-items:center;justify-content:center;z-index:1;transition:opacity .4s ease;padding:2rem;text-align:center}
+/* Film grain */
+.grain{position:fixed;inset:0;z-index:90;pointer-events:none;opacity:.04;background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E")}
 /* Progress bar */
-.progress{position:fixed;bottom:0;left:0;height:2px;background:var(--gold);width:0;animation:progress var(--total) linear both;z-index:200}
-@keyframes progress{0%{width:0}100%{width:100%}}
+.progress{position:fixed;bottom:0;left:0;height:3px;background:linear-gradient(90deg,#b8860b,#ffd700);z-index:95;width:0;transition:width .1s linear}
+/* Gold */
+.gold{color:#ffd700}
+.gold-glow{color:#ffd700;text-shadow:0 0 40px rgba(255,215,0,.3)}
+
+/* Scene 1 */
+.s1-title{font-size:clamp(4rem,15vw,10rem);font-weight:900;letter-spacing:-.04em;color:#ffd700;text-shadow:0 0 60px rgba(255,215,0,.2)}
+
+/* Scene 2 */
+.s2-text{font-size:clamp(1.5rem,5vw,3rem);font-weight:300;letter-spacing:.05em;opacity:.9}
+
+/* Scene 3 */
+.s3-input{background:rgba(255,255,255,.06);border:1px solid rgba(255,215,0,.3);border-radius:12px;padding:1rem 1.5rem;font-size:clamp(1rem,3vw,1.5rem);color:#ffd700;font-family:'Inter',sans-serif;width:min(90%,500px);text-align:left;margin-bottom:2rem;position:relative}
+.s3-cursor{display:inline-block;width:2px;height:1.2em;background:#ffd700;vertical-align:text-bottom;animation:blink 1s step-end infinite}
+@keyframes blink{50%{opacity:0}}
+.s3-3d{font-size:clamp(2rem,7vw,4rem);font-weight:900;color:#ffd700;transform:perspective(600px) rotateX(10deg);text-shadow:0 4px 0 #b8860b,0 8px 20px rgba(0,0,0,.5)}
+
+/* Scene 4 */
+.s4-line{font-size:clamp(1.2rem,4vw,2.2rem);font-weight:600;letter-spacing:.02em}
+.s4-line span{opacity:.3;transition:opacity .4s ease,color .4s ease}
+.s4-line span.lit{opacity:1;color:#ffd700}
+
+/* Scene 5 */
+.s5-num{font-size:clamp(5rem,18vw,12rem);font-weight:900;color:#ffd700;text-shadow:0 0 80px rgba(255,215,0,.25),0 0 160px rgba(255,215,0,.1)}
+.s5-sub{font-size:clamp(1rem,3vw,1.5rem);font-weight:300;opacity:.7;margin-top:1rem}
+
+/* Scene 6 */
+.s6-flow{font-size:clamp(1.2rem,4vw,2.2rem);font-weight:600;letter-spacing:.02em}
+.s6-flow .arrow{color:#ffd700;margin:0 .5em}
+
+/* Scene 7 */
+.s7-text{font-size:clamp(1.3rem,4vw,2.2rem);font-weight:300;margin-bottom:2rem}
+.s7-bar{background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);border-radius:999px;padding:.7rem 1.5rem;font-size:clamp(.8rem,2.5vw,1.1rem);color:rgba(255,255,255,.5);width:min(90%,500px);display:flex;align-items:center;gap:.5rem}
+.s7-lock{opacity:.4}
+
+/* Scene 8 */
+.s8-line{font-size:clamp(1.5rem,5vw,3rem);font-weight:300;opacity:0;transition:opacity .5s ease;margin:.3em 0}
+
+/* Scene 9 */
+.s9-url{font-size:clamp(1.5rem,5vw,2.5rem);font-weight:700;color:#ffd700;margin-bottom:1rem}
+.s9-sub{font-size:clamp(1rem,3vw,1.5rem);font-weight:300;opacity:.7;margin-bottom:2rem}
+.s9-btn{background:none;border:1px solid rgba(255,215,0,.4);color:#ffd700;padding:.8rem 2rem;border-radius:999px;font-size:1rem;font-family:'Inter',sans-serif;cursor:pointer;transition:all .3s}
+.s9-btn:hover{background:rgba(255,215,0,.1);border-color:#ffd700}
 </style>
 </head>
 <body>
+<div class="grain"></div>
+<div class="progress" id="progress"></div>
 
-<div class="progress"></div>
-
-<!-- S1: 0-4s — Title -->
-<div class="scene" id="s1">
-  <h1>SPEAK23D</h1>
-</div>
-
-<!-- S2: 4-6s — Tagline -->
+<div class="scene" id="s0"><div class="s1-title">SPEAK23D</div></div>
+<div class="scene" id="s1"><div class="s2-text">Type it. Print it. Mount it.</div></div>
 <div class="scene" id="s2">
-  <p>Type it. Print it. Mount it.</p>
+  <div class="s3-input"><span id="typeTarget"></span><span class="s3-cursor"></span></div>
+  <div class="s3-3d" id="s3text"></div>
 </div>
-
-<!-- S3: 6-11s — Typing demo -->
-<div class="scene" id="s3">
-  <div class="mock-input">
-    <div class="label">Enter your text</div>
-    <div class="typed-text">SMITH</div>
-  </div>
-  <div class="demo-3d">
-    <div class="demo-3d-inner">
-      <span class="demo-3d-layer" aria-hidden="true">SMITH</span>
-      <span class="demo-3d-layer" aria-hidden="true">SMITH</span>
-      <span class="demo-3d-layer" aria-hidden="true">SMITH</span>
-      <span class="demo-3d-layer" aria-hidden="true">SMITH</span>
-      <span class="demo-3d-layer" aria-hidden="true">SMITH</span>
-      <span class="demo-3d-layer" aria-hidden="true">SMITH</span>
-      <span class="demo-3d-layer" aria-hidden="true">SMITH</span>
-      <span class="demo-3d-layer" aria-hidden="true">SMITH</span>
-      <span class="demo-3d-front">SMITH</span>
-    </div>
-  </div>
-</div>
-
-<!-- S4: 11-14s — Features -->
+<div class="scene" id="s3"><div class="s4-line"><span id="f1">7 Fonts</span> · <span id="f2">LED Preview</span> · <span id="f3">Night Mode</span></div></div>
 <div class="scene" id="s4">
-  <div class="features-row">
-    <span class="feat-item">7 Fonts</span>
-    <span class="feat-sep">&middot;</span>
-    <span class="feat-item">LED Preview</span>
-    <span class="feat-sep">&middot;</span>
-    <span class="feat-item">Night Mode</span>
-  </div>
+  <div class="s5-num">42</div>
+  <div class="s5-sub">See it installed before you print</div>
 </div>
-
-<!-- S5: 14-18s — Environment preview -->
-<div class="scene" id="s5">
-  <div class="env-frame">
-    <div class="env-glow"></div>
-    <div class="env-num">42</div>
-  </div>
-  <div class="env-label">See it installed before you print</div>
-</div>
-
-<!-- S6: 18-22s — Export -->
+<div class="scene" id="s5"><div class="s6-flow">.STL <span class="arrow">→</span> .3MF <span class="arrow">→</span> Bambu X1 Carbon</div></div>
 <div class="scene" id="s6">
-  <div class="export-pipeline">
-    <div class="export-icon"><div class="icon-cube"></div></div>
-    <div class="export-arrow">&rarr;</div>
-    <div class="format-badge">.3MF</div>
-    <div class="export-arrow">&rarr;</div>
-    <div class="export-icon"><div class="icon-printer"></div></div>
-  </div>
+  <div class="s7-text">Share a link. They see what you see.</div>
+  <div class="s7-bar"><span class="s7-lock">🔒</span> speak23d.vercel.app/s/a7x9f</div>
 </div>
-
-<!-- S7: 22-26s — Share -->
 <div class="scene" id="s7">
-  <h2>Send a link.<br>They see what you see.</h2>
-  <div class="share-url-bar">
-    <div class="url-dots"><span></span><span></span><span></span></div>
-    <span class="url-text">speak23d.vercel.app/s/abc123</span>
-  </div>
+  <div class="s8-line" id="ni1">No install.</div>
+  <div class="s8-line" id="ni2">No software.</div>
+  <div class="s8-line" id="ni3">Just a browser.</div>
 </div>
-
-<!-- S8: 26-30s — No install -->
 <div class="scene" id="s8">
-  <div class="line">No install.</div>
-  <div class="line">No software.</div>
-  <div class="line">Just a <span>browser</span>.</div>
+  <div class="s9-url">speak23d.vercel.app</div>
+  <div class="s9-sub">Built for builders.</div>
+  <button class="s9-btn" onclick="replay()">▶ Watch Again</button>
 </div>
 
-<!-- S9: 30-35s — CTA -->
-<div class="scene" id="s9">
-  <h1>speak23d.vercel.app</h1>
-  <p class="subtitle">Built for builders.</p>
-  <button class="replay-btn" onclick="location.reload()">Replay</button>
-</div>
+<script>
+const scenes=document.querySelectorAll('.scene');
+const progress=document.getElementById('progress');
+const FADE=400,GAP=500,TOTAL=35500;
+let startTime=0,progressRAF=0,timeouts=[];
 
+const timeline=[
+  {id:0,start:0,dur:4000},
+  {id:1,start:4500,dur:2000},
+  {id:2,start:7000,dur:4500},
+  {id:3,start:12000,dur:3000},
+  {id:4,start:15500,dur:4000},
+  {id:5,start:20000,dur:3500},
+  {id:6,start:24000,dur:3500},
+  {id:7,start:28000,dur:3000},
+  {id:8,start:31500,dur:4000}
+];
+
+function showScene(i){
+  scenes[i].style.display='flex';
+  requestAnimationFrame(()=>requestAnimationFrame(()=>{scenes[i].style.opacity='1'}));
+  // scene-specific animations
+  if(i===2)typeAnimation();
+  if(i===3)featureHighlight();
+  if(i===7)noInstallReveal();
+}
+function hideScene(i){
+  scenes[i].style.opacity='0';
+  setTimeout(()=>{scenes[i].style.display='none'},FADE);
+}
+
+function typeAnimation(){
+  const word="HELLO";const el=document.getElementById('typeTarget');const t3=document.getElementById('s3text');
+  el.textContent='';t3.textContent='';
+  word.split('').forEach((ch,i)=>{
+    timeouts.push(setTimeout(()=>{el.textContent+=ch;t3.textContent=el.textContent},i*350));
+  });
+}
+function featureHighlight(){
+  ['f1','f2','f3'].forEach((id,i)=>{
+    timeouts.push(setTimeout(()=>{document.getElementById(id).classList.add('lit')},i*700));
+  });
+}
+function noInstallReveal(){
+  ['ni1','ni2','ni3'].forEach((id,i)=>{
+    timeouts.push(setTimeout(()=>{document.getElementById(id).style.opacity='1'},i*800));
+  });
+}
+
+function updateProgress(){
+  const elapsed=Date.now()-startTime;
+  const pct=Math.min(elapsed/TOTAL*100,100);
+  progress.style.width=pct+'%';
+  if(pct<100)progressRAF=requestAnimationFrame(updateProgress);
+}
+
+function run(){
+  // reset
+  timeouts.forEach(clearTimeout);timeouts=[];
+  cancelAnimationFrame(progressRAF);
+  scenes.forEach(s=>{s.style.display='none';s.style.opacity='0'});
+  progress.style.width='0';
+  ['f1','f2','f3'].forEach(id=>{const e=document.getElementById(id);if(e)e.classList.remove('lit')});
+  ['ni1','ni2','ni3'].forEach(id=>{const e=document.getElementById(id);if(e)e.style.opacity='0'});
+  document.getElementById('typeTarget').textContent='';
+  document.getElementById('s3text').textContent='';
+
+  startTime=Date.now();
+  updateProgress();
+
+  timeline.forEach((entry,idx)=>{
+    timeouts.push(setTimeout(()=>showScene(entry.id),entry.start));
+    if(idx<timeline.length-1){
+      timeouts.push(setTimeout(()=>hideScene(entry.id),entry.start+entry.dur));
+    }
+  });
+}
+
+function replay(){run()}
+run();
+</script>
 </body>
 </html>
