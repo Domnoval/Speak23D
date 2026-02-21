@@ -992,14 +992,68 @@ function addLEDVisualization(
     const lCx = (bb.min.x + bb.max.x) / 2;
     const lCy = (bb.min.y + bb.max.y) / 2;
     const chLen = (bb.max.y - bb.min.y) * 0.8;
+    const letterSize = Math.max(bb.max.x - bb.min.x, bb.max.y - bb.min.y);
 
     if (isNoBackplate && params.haloLED) {
-      // Halo LED effect - creates glow BEHIND letters only
-      // Position LED elements well behind the letter back face
-      const channelZ = bb.min.z - 8 * MM; // Further back to avoid bleeding through
+      // === HALO LED PHYSICAL HOUSING ===
+      // Show the actual LED channel housing on back face for WYSIWYG preview
+      const channelWidth = 6 * MM * params.scaleFactor;
+      const channelDepth = 1.5 * MM * params.scaleFactor;
+      const backZ = bb.min.z + channelDepth / 2;
+
+      // Dark recessed channel groove - L-shaped pattern matching addHaloLEDChannel()
+      const channelMaterial = new THREE.MeshStandardMaterial({
+        color: 0x1a1a1a, // Dark charcoal
+        roughness: 0.8,
+        metalness: 0.15, // Slight metallic look
+      });
+
+      // Horizontal channel (bottom of letter)
+      const letterW = bb.max.x - bb.min.x;
+      const letterH = bb.max.y - bb.min.y;
+      const insetW = letterW - 8 * MM * params.scaleFactor; // 4mm margin on each side
+      const insetH = letterH - 8 * MM * params.scaleFactor;
+
+      if (insetW > channelWidth * 1.5 && insetH > channelWidth * 1.5) {
+        // Horizontal channel
+        const hChannelGeo = new THREE.BoxGeometry(insetW * 0.8, channelWidth, channelDepth);
+        const hChannel = new THREE.Mesh(hChannelGeo, channelMaterial.clone());
+        hChannel.position.set(lCx, lCy - insetH * 0.3, backZ);
+        group.add(hChannel);
+
+        // Vertical channel for taller letters
+        if (letterH > params.heightMM * MM * params.scaleFactor * 0.8) {
+          const vChannelGeo = new THREE.BoxGeometry(channelWidth, insetH * 0.6, channelDepth);
+          const vChannel = new THREE.Mesh(vChannelGeo, channelMaterial.clone());
+          vChannel.position.set(lCx - insetW * 0.3, lCy, backZ);
+          group.add(vChannel);
+        }
+
+        // Optional translucent diffuser cover over channels
+        const diffuserMaterial = new THREE.MeshStandardMaterial({
+          color: 0xffffff,
+          transparent: true,
+          opacity: 0.3,
+          roughness: 0.9, // Frosted appearance
+        });
+
+        // Diffuser over horizontal channel
+        const hDiffuserGeo = new THREE.BoxGeometry(insetW * 0.8, channelWidth + 1 * MM, 0.5 * MM);
+        const hDiffuser = new THREE.Mesh(hDiffuserGeo, diffuserMaterial.clone());
+        hDiffuser.position.set(lCx, lCy - insetH * 0.3, bb.min.z - 0.25 * MM);
+        group.add(hDiffuser);
+
+        if (letterH > params.heightMM * MM * params.scaleFactor * 0.8) {
+          // Diffuser over vertical channel
+          const vDiffuserGeo = new THREE.BoxGeometry(channelWidth + 1 * MM, insetH * 0.6, 0.5 * MM);
+          const vDiffuser = new THREE.Mesh(vDiffuserGeo, diffuserMaterial.clone());
+          vDiffuser.position.set(lCx - insetW * 0.3, lCy, bb.min.z - 0.25 * MM);
+          group.add(vDiffuser);
+        }
+      }
 
       // LED strip visualization - thin ring behind letter, not visible from front
-      const letterSize = Math.max(bb.max.x - bb.min.x, bb.max.y - bb.min.y);
+      const channelZ = bb.min.z - 8 * MM; // Further back for glow effect
       const haloGeo = new THREE.RingGeometry(
         letterSize * 0.3,
         letterSize * 0.35,
@@ -1009,7 +1063,7 @@ function addLEDVisualization(
         ? new THREE.MeshStandardMaterial({
           color: color3,
           emissive: color3,
-          emissiveIntensity: params.ledBrightness * 0.6, // Reduced intensity
+          emissiveIntensity: params.ledBrightness * 0.6,
           roughness: 0.1,
           transparent: true,
           opacity: 0.8,
@@ -1022,21 +1076,20 @@ function addLEDVisualization(
         });
       const halo = new THREE.Mesh(haloGeo, haloMat);
       halo.position.set(lCx, lCy, channelZ);
-      halo.rotation.x = 0; // Face the wall behind
       group.add(halo);
 
       // Create halo glow effect - ONLY when LEDs are on and positioned behind letter
       if (params.ledOn) {
         // Wall glow effect - positioned to cast light backward onto imaginary wall
-        const wallGlowZ = channelZ - 5 * MM; // Even further back to simulate wall glow
+        const wallGlowZ = channelZ - 5 * MM;
         const wallGlowGeo = new THREE.PlaneGeometry(letterSize * 2.5, letterSize * 2.5);
         const wallGlowMat = new THREE.MeshStandardMaterial({
           color: color3,
           emissive: color3,
-          emissiveIntensity: params.ledBrightness * 0.2, // Subtle wall glow
+          emissiveIntensity: params.ledBrightness * 0.2,
           transparent: true,
           opacity: 0.15,
-          side: THREE.BackSide, // Only visible from behind
+          side: THREE.BackSide,
         });
         const wallGlow = new THREE.Mesh(wallGlowGeo, wallGlowMat);
         wallGlow.position.set(lCx, lCy, wallGlowZ);
@@ -1045,40 +1098,69 @@ function addLEDVisualization(
         // Point light for halo effect - casts light BACKWARD
         const haloLight = new THREE.PointLight(color3, params.ledBrightness * 0.3, letterSize * 2);
         haloLight.position.set(lCx, lCy, channelZ);
-        // Add light decay for realistic falloff
         haloLight.decay = 2;
         group.add(haloLight);
       }
+
     } else if (params.housing) {
-      // Regular backplate housing LED channels - positioned in backplate, not floating
+      // === REGULAR BACKPLATE LED HOUSING ===
       const channelZ = bb.min.z - ledD * MM;
 
-      // Channel groove geometry - positioned BEHIND letter face, not between letters
+      // Physical LED channel housing - dark recessed groove on back face
+      const channelMaterial = new THREE.MeshStandardMaterial({
+        color: 0x1a1a1a, // Dark charcoal 
+        roughness: 0.8,
+        metalness: 0.15, // Slight metallic finish
+      });
+
+      // Main channel groove geometry - vertical rectangle on back face
       const channelGeo = new THREE.BoxGeometry(
         ledW * MM * 1.1,
         Math.max(chLen, ledW * MM),
         ledD * MM
       );
-      const channelMat = params.ledOn
-        ? new THREE.MeshStandardMaterial({
+      const channelHousing = new THREE.Mesh(channelGeo, channelMaterial);
+      channelHousing.position.set(lCx, lCy, channelZ);
+      group.add(channelHousing);
+
+      // Translucent diffuser cover over the channel
+      const diffuserMaterial = new THREE.MeshStandardMaterial({
+        color: 0xffffff,
+        transparent: true,
+        opacity: 0.3,
+        roughness: 0.9, // Frosted look
+      });
+      
+      const diffuserGeo = new THREE.BoxGeometry(
+        ledW * MM * 1.2, // Slightly wider than channel
+        Math.max(chLen, ledW * MM) + 2 * MM, // Slightly taller
+        0.8 * MM // Thin diffuser
+      );
+      const diffuser = new THREE.Mesh(diffuserGeo, diffuserMaterial);
+      diffuser.position.set(lCx, lCy, channelZ + ledD * MM / 2 + 0.4 * MM);
+      group.add(diffuser);
+
+      // LED strip simulation inside the channel (when on)
+      if (params.ledOn) {
+        const stripGeo = new THREE.BoxGeometry(
+          ledW * MM * 0.9,
+          Math.max(chLen, ledW * MM) * 0.9,
+          1 * MM
+        );
+        const stripMat = new THREE.MeshStandardMaterial({
           color: color3,
           emissive: color3,
-          emissiveIntensity: params.ledBrightness * 0.8, // Reduced from 1.2
+          emissiveIntensity: params.ledBrightness * 0.6,
           roughness: 0.2,
-        })
-        : new THREE.MeshStandardMaterial({
-          color: 0x222222, // Darker when off
-          roughness: 0.9,
         });
-      const channel = new THREE.Mesh(channelGeo, channelMat);
-      channel.position.set(lCx, lCy, channelZ);
-      group.add(channel);
+        const strip = new THREE.Mesh(stripGeo, stripMat);
+        strip.position.set(lCx, lCy, channelZ + ledD * MM / 4);
+        group.add(strip);
 
-      // Add point light per letter when on - positioned behind letter
-      if (params.ledOn) {
+        // Point light from the channel
         const pl = new THREE.PointLight(color3, params.ledBrightness * 0.4, 0.12);
-        pl.position.set(lCx, lCy, channelZ - ledD * MM); // Behind the channel
-        pl.decay = 2; // Realistic light decay
+        pl.position.set(lCx, lCy, channelZ + ledD * MM / 2);
+        pl.decay = 2;
         group.add(pl);
       }
     }
