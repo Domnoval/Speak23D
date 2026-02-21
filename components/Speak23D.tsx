@@ -1921,6 +1921,15 @@ export default function Speak23D() {
     }, undefined, () => setStatus(`Error loading font: ${entry.label}`));
   }, []);
 
+  // Suppress OrbitControls offsetX errors on mobile (non-critical)
+  useEffect(() => {
+    const handler = (e: ErrorEvent) => {
+      if (e.message?.includes("offsetX")) { e.preventDefault(); }
+    };
+    window.addEventListener("error", handler);
+    return () => window.removeEventListener("error", handler);
+  }, []);
+
   // Font verification
   const verifyAllFonts = useCallback(() => {
     const results: Record<string, boolean> = {};
@@ -1956,26 +1965,6 @@ export default function Speak23D() {
     if (!canvasRef.current) return;
     const container = canvasRef.current;
     
-    // Add defensive error handling for offsetX errors
-    const originalAddEventListener = container.addEventListener;
-    container.addEventListener = function(type: string, listener: any, options?: any) {
-      const wrappedListener = (event: any) => {
-        try {
-          // Ensure offsetX and offsetY exist for pointer events
-          if (event && (type === 'pointermove' || type === 'pointerdown' || type === 'pointerup' || type === 'mousemove' || type === 'mousedown' || type === 'mouseup')) {
-            if (typeof event.offsetX === 'undefined' && event.clientX !== undefined) {
-              const rect = container.getBoundingClientRect();
-              event.offsetX = event.clientX - rect.left;
-              event.offsetY = event.clientY - rect.top;
-            }
-          }
-          return listener(event);
-        } catch (error) {
-          console.warn('Event handler error (non-critical):', error);
-        }
-      };
-      return originalAddEventListener.call(this, type, wrappedListener, options);
-    };
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(0x1a1a2e);
     sceneRef.current = scene;
@@ -2001,6 +1990,18 @@ export default function Speak23D() {
     composer.addPass(bloomPass);
     composerRef.current = composer;
     bloomPassRef.current = bloomPass;
+
+    // Fix offsetX/offsetY missing on some mobile browsers (OrbitControls needs these)
+    const patchPointerEvent = (e: PointerEvent) => {
+      if (typeof e.offsetX === 'undefined') {
+        const rect = renderer.domElement.getBoundingClientRect();
+        Object.defineProperty(e, 'offsetX', { get: () => e.clientX - rect.left });
+        Object.defineProperty(e, 'offsetY', { get: () => e.clientY - rect.top });
+      }
+    };
+    renderer.domElement.addEventListener('pointerdown', patchPointerEvent, true);
+    renderer.domElement.addEventListener('pointermove', patchPointerEvent, true);
+    renderer.domElement.addEventListener('pointerup', patchPointerEvent, true);
 
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
