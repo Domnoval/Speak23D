@@ -87,7 +87,7 @@ function convertToTypeface(font, familyName) {
       }
     }
     glyphData.o = o.trim();
-    result.glyphs[String(charCode)] = glyphData;
+    result.glyphs[char] = glyphData;
   }
 
   return result;
@@ -107,7 +107,7 @@ async function main() {
     },
     {
       name: 'Roboto Bold', 
-      url: 'https://fonts.gstatic.com/s/roboto/v30/KFOlCnqEu92Fr1MmWUlfBBc4.woff2',
+      url: 'https://github.com/google/fonts/raw/main/ofl/roboto/Roboto%5Bwdth%2Cwght%5D.ttf',
       file: 'roboto_bold',
       category: 'Sans Serif'
     },

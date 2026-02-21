@@ -24,6 +24,7 @@ const FONT_MAP: Record<string, { label: string; file: string }> = {
   poiret: { label: "Poiret One", file: "/fonts/poiret_one.typeface.json" },
   pacifico: { label: "Pacifico", file: "/fonts/pacifico.typeface.json" },
   alfaslab: { label: "Alfa Slab One", file: "/fonts/alfa_slab_one.typeface.json" },
+  roboto: { label: "Roboto Bold", file: "/fonts/roboto_bold.typeface.json" },
 };
 
 // ═══ LED Color Presets ═══════════════════════════════════════════════════
