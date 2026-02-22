@@ -781,11 +781,29 @@ function createFontPreviewCanvas(text: string, fontFamily: string): string {
   return canvas.toDataURL();
 }
 
+// ═══ Photo Analysis Types ═══════════════════════════════════════════════
+
+interface PhotoAnalysis {
+  surface_material: string;
+  surface_color: string;
+  architectural_style: string;
+  lighting: string;
+  mounting_surface: string;
+  recommendations: {
+    font: string;
+    led_color: string;
+    build_type: string;
+    size_preset: string;
+  };
+  raw_response?: string;
+}
+
 // ═══ Wizard Steps ════════════════════════════════════════════════════════
 
-type WizardStep = "TYPE" | "STYLE" | "BUILD" | "LIGHT" | "EXPORT";
+type WizardStep = "PHOTO" | "TYPE" | "STYLE" | "BUILD" | "LIGHT" | "EXPORT";
 
 const WIZARD_STEPS: { step: WizardStep; label: string; icon: string }[] = [
+  { step: "PHOTO", label: "Photo", icon: "📸" },
   { step: "TYPE", label: "Type", icon: "✏️" },
   { step: "STYLE", label: "Style", icon: "🎨" },
   { step: "BUILD", label: "Build", icon: "🏗️" },
@@ -813,8 +831,15 @@ export default function Speak23D() {
   }>({ letters: [], ledStrips: [] });
 
   const [params, setParams] = useState<Params>(DEFAULT_PARAMS);
-  const [currentStep, setCurrentStep] = useState<WizardStep>("TYPE");
+  const [currentStep, setCurrentStep] = useState<WizardStep>("PHOTO");
   const [generating, setGenerating] = useState(false);
+  
+  // Photo Analysis State
+  const [uploadedImage, setUploadedImage] = useState<string | null>(null);
+  const [photoAnalysis, setPhotoAnalysis] = useState<PhotoAnalysis | null>(null);
+  const [analyzing, setAnalyzing] = useState(false);
+  const [mockupPosition, setMockupPosition] = useState({ x: 50, y: 50 });
+  const [mockupScale, setMockupScale] = useState(1.0);
   const [fontLoaded, setFontLoaded] = useState(false);
   const [dims, setDims] = useState("");
   const [status, setStatus] = useState("Loading font...");
@@ -1315,6 +1340,289 @@ export default function Speak23D() {
     setParams(prev => ({ ...prev, [key]: value }));
   };
 
+  // Photo Analysis Functions
+  const analyzePhoto = async (imageData: string) => {
+    setAnalyzing(true);
+    try {
+      const response = await fetch('/api/analyze', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ imageData }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to analyze photo');
+      }
+
+      const result = await response.json();
+      setPhotoAnalysis(result.analysis);
+      
+      // Auto-apply AI recommendations
+      applyAIRecommendations(result.analysis);
+      
+    } catch (error) {
+      console.error('Photo analysis failed:', error);
+      setStatus(`Analysis failed: ${error instanceof Error ? error.message : String(error)}`);
+    } finally {
+      setAnalyzing(false);
+    }
+  };
+
+  const applyAIRecommendations = (analysis: PhotoAnalysis) => {
+    const recommendations = analysis.recommendations;
+    
+    // Map AI recommendations to existing parameters
+    const fontMapping: Record<string, string> = {
+      'sans-serif': 'helvetiker',
+      'serif': 'playfair',
+      'script': 'greatvibes',
+      'modern': 'helvetiker',
+      'traditional': 'playfair',
+      'elegant': 'greatvibes',
+    };
+
+    const sizeMapping: Record<string, number> = {
+      'small': 65,
+      'medium': 100,
+      'large': 160,
+      'mailbox': 65,
+      'front_door': 100,
+      'street_visible': 160,
+    };
+
+    const buildTypeMapping: Record<string, { housing: boolean; backplateShape: BackplateShape }> = {
+      'floating': { housing: false, backplateShape: 'none' },
+      'backplate': { housing: false, backplateShape: 'rectangle' },
+      'housing': { housing: true, backplateShape: 'rectangle' },
+      'full_housing': { housing: true, backplateShape: 'rectangle' },
+    };
+
+    // Apply font recommendation
+    const recommendedFont = fontMapping[recommendations.font] || fontMapping['modern'] || 'helvetiker';
+    updateParam('font', recommendedFont);
+
+    // Apply size recommendation
+    const recommendedSize = sizeMapping[recommendations.size_preset] || sizeMapping['medium'] || 100;
+    updateParam('heightMM', recommendedSize);
+
+    // Apply build type recommendation
+    const buildType = buildTypeMapping[recommendations.build_type] || buildTypeMapping['housing'];
+    updateParam('housing', buildType.housing);
+    updateParam('backplateShape', buildType.backplateShape);
+
+    // Apply LED color recommendation
+    const ledColorMapping: Record<string, string> = {
+      'warm_white': 'warm_white',
+      'cool_white': 'cool_white',
+      'warm': 'warm_white',
+      'cool': 'cool_white',
+      'red': 'red',
+      'blue': 'blue',
+      'green': 'green',
+    };
+    const ledColor = ledColorMapping[recommendations.led_color] || 'warm_white';
+    updateParam('ledColorPreset', ledColor);
+    updateParam('ledOn', true); // Enable LEDs by default when AI recommends them
+
+    setStatus('✅ AI recommendations applied successfully');
+  };
+
+  const handleImageUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    // Check file size (5MB max)
+    if (file.size > 5 * 1024 * 1024) {
+      alert('File size must be under 5MB');
+      return;
+    }
+
+    // Check file type
+    if (!file.type.match(/image\/(jpeg|jpg|png)/)) {
+      alert('Please upload a JPG or PNG image');
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const imageData = e.target?.result as string;
+      setUploadedImage(imageData);
+      analyzePhoto(imageData);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    const files = Array.from(e.dataTransfer.files);
+    const imageFile = files.find(file => file.type.match(/image\/(jpeg|jpg|png)/));
+    
+    if (imageFile) {
+      // Create a proper FileList-like object
+      const fileList = {
+        0: imageFile,
+        length: 1,
+        item: (index: number) => index === 0 ? imageFile : null,
+        *[Symbol.iterator]() {
+          yield imageFile;
+        }
+      } as FileList;
+
+      const fakeEvent = {
+        target: { files: fileList },
+        currentTarget: { files: fileList }
+      } as React.ChangeEvent<HTMLInputElement>;
+      handleImageUpload(fakeEvent);
+    }
+  };
+
+  const skipPhotoStep = () => {
+    setCurrentStep("TYPE");
+  };
+
+  // AR Mockup Functions
+  const createMockupCanvas = useCallback((): string | null => {
+    if (!uploadedImage || !hasGenerated || !rendererRef.current || !sceneRef.current || !cameraRef.current) {
+      return null;
+    }
+
+    const renderer = rendererRef.current;
+    const scene = sceneRef.current;
+    const camera = cameraRef.current;
+
+    // Create a temporary canvas for the mockup
+    const mockupCanvas = document.createElement('canvas');
+    const ctx = mockupCanvas.getContext('2d')!;
+    
+    // Set canvas size (high resolution for quality)
+    const baseWidth = 800;
+    const baseHeight = 600;
+    mockupCanvas.width = baseWidth;
+    mockupCanvas.height = baseHeight;
+
+    return new Promise<string>((resolve) => {
+      // Load the uploaded image
+      const img = new Image();
+      img.onload = () => {
+        // Draw the background photo
+        ctx.fillStyle = '#000';
+        ctx.fillRect(0, 0, baseWidth, baseHeight);
+        
+        // Scale and center the photo
+        const imgAspect = img.width / img.height;
+        const canvasAspect = baseWidth / baseHeight;
+        
+        let drawWidth = baseWidth;
+        let drawHeight = baseHeight;
+        let drawX = 0;
+        let drawY = 0;
+        
+        if (imgAspect > canvasAspect) {
+          drawHeight = baseWidth / imgAspect;
+          drawY = (baseHeight - drawHeight) / 2;
+        } else {
+          drawWidth = baseHeight * imgAspect;
+          drawX = (baseWidth - drawWidth) / 2;
+        }
+        
+        ctx.drawImage(img, drawX, drawY, drawWidth, drawHeight);
+
+        // Now render the 3D sign to get a transparent overlay
+        const originalSize = { 
+          width: renderer.domElement.width, 
+          height: renderer.domElement.height 
+        };
+        
+        // Render at higher resolution
+        const signSize = 400; // Size for the 3D render
+        renderer.setSize(signSize, signSize);
+        camera.aspect = 1;
+        camera.updateProjectionMatrix();
+        
+        // Set transparent background for the sign render
+        const originalBg = scene.background;
+        scene.background = null;
+        renderer.setClearColor(0x000000, 0); // Transparent
+
+        renderer.render(scene, camera);
+        
+        // Get the 3D render as image data
+        const signDataURL = renderer.domElement.toDataURL('image/png');
+        const signImg = new Image();
+        
+        signImg.onload = () => {
+          // Calculate mockup position and size
+          const mockupX = (mockupPosition.x / 100) * baseWidth;
+          const mockupY = (mockupPosition.y / 100) * baseHeight;
+          const mockupSize = mockupScale * 200; // Base size of 200px
+          
+          // Add drop shadow
+          ctx.save();
+          ctx.shadowColor = 'rgba(0, 0, 0, 0.3)';
+          ctx.shadowBlur = 10;
+          ctx.shadowOffsetX = 3;
+          ctx.shadowOffsetY = 3;
+          
+          // Draw the sign
+          ctx.drawImage(
+            signImg,
+            mockupX - mockupSize / 2,
+            mockupY - mockupSize / 2,
+            mockupSize,
+            mockupSize
+          );
+          
+          ctx.restore();
+          
+          // Restore renderer state
+          scene.background = originalBg;
+          renderer.setSize(originalSize.width, originalSize.height);
+          camera.aspect = originalSize.width / originalSize.height;
+          camera.updateProjectionMatrix();
+          renderer.setClearColor(0x0a0a0a, 1);
+          
+          resolve(mockupCanvas.toDataURL('image/png'));
+        };
+        
+        signImg.src = signDataURL;
+      };
+      
+      img.src = uploadedImage;
+    }) as any;
+  }, [uploadedImage, hasGenerated, mockupPosition, mockupScale]);
+
+  const exportARMockup = useCallback(async () => {
+    const mockupDataURL = await createMockupCanvas();
+    if (!mockupDataURL) {
+      alert('Please upload a photo first and generate your sign');
+      return;
+    }
+
+    // Download the mockup
+    const a = document.createElement('a');
+    a.href = mockupDataURL;
+    const text = params.lines.map(l => l.text).join('_');
+    a.download = `speak23d_ar_mockup_${text.replace(/\W/g, '_')}.png`;
+    a.click();
+  }, [createMockupCanvas, params.lines]);
+
+  const handleMockupCanvasClick = (event: React.MouseEvent<HTMLCanvasElement>) => {
+    const canvas = event.currentTarget;
+    const rect = canvas.getBoundingClientRect();
+    const x = ((event.clientX - rect.left) / rect.width) * 100;
+    const y = ((event.clientY - rect.top) / rect.height) * 100;
+    setMockupPosition({ x, y });
+  };
+
   const isNoBackplate = params.backplateShape === "none";
 
   return (
@@ -1359,6 +1667,138 @@ export default function Speak23D() {
 
         {/* Step Content */}
         <div className="flex-1 p-4 space-y-6">
+          {currentStep === "PHOTO" && (
+            <div className="space-y-6">
+              <div className="text-center mb-8">
+                <h2 className="text-2xl font-bold mb-2">Upload your space</h2>
+                <p className="text-zinc-400">AI will analyze your photo and recommend the perfect sign</p>
+              </div>
+
+              {!uploadedImage ? (
+                <div className="space-y-4">
+                  {/* Drag & Drop Zone */}
+                  <div
+                    onDragOver={handleDragOver}
+                    onDrop={handleDrop}
+                    className="border-2 border-dashed border-zinc-600 rounded-lg p-8 text-center hover:border-zinc-500 transition-all cursor-pointer"
+                    onClick={() => document.getElementById('photo-upload')?.click()}
+                  >
+                    <div className="space-y-4">
+                      <div className="text-4xl">📸</div>
+                      <div>
+                        <p className="text-lg font-medium">Drop your photo here</p>
+                        <p className="text-sm text-zinc-400">or click to browse</p>
+                      </div>
+                      <div className="text-xs text-zinc-500">
+                        JPG or PNG • Max 5MB • House, door, mailbox, or wall
+                      </div>
+                    </div>
+                  </div>
+
+                  <input
+                    id="photo-upload"
+                    type="file"
+                    accept="image/jpeg,image/jpg,image/png"
+                    onChange={handleImageUpload}
+                    className="hidden"
+                  />
+
+                  {/* Skip Option */}
+                  <div className="text-center pt-4 border-t border-zinc-800">
+                    <button
+                      onClick={skipPhotoStep}
+                      className="px-4 py-2 text-zinc-400 hover:text-zinc-300 transition-all"
+                    >
+                      Skip AI analysis →
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {/* Uploaded Image Preview */}
+                  <div className="relative rounded-lg overflow-hidden">
+                    <img
+                      src={uploadedImage}
+                      alt="Uploaded space"
+                      className="w-full h-48 object-cover"
+                    />
+                    {analyzing && (
+                      <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
+                        <div className="flex items-center gap-2 text-white">
+                          <div className="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full" />
+                          <span>Analyzing your space...</span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Analysis Results */}
+                  {photoAnalysis && !analyzing && (
+                    <div className="bg-zinc-800 rounded-lg p-4 space-y-3">
+                      <h3 className="font-semibold text-green-400 flex items-center gap-2">
+                        <span>✅</span> AI Analysis Complete
+                      </h3>
+                      <div className="grid grid-cols-2 gap-3 text-sm">
+                        <div>
+                          <span className="text-zinc-400">Surface:</span>
+                          <div className="capitalize">{photoAnalysis.surface_material}</div>
+                        </div>
+                        <div>
+                          <span className="text-zinc-400">Style:</span>
+                          <div className="capitalize">{photoAnalysis.architectural_style}</div>
+                        </div>
+                        <div>
+                          <span className="text-zinc-400">Lighting:</span>
+                          <div className="capitalize">{photoAnalysis.lighting}</div>
+                        </div>
+                        <div>
+                          <span className="text-zinc-400">Mount on:</span>
+                          <div className="capitalize">{photoAnalysis.mounting_surface}</div>
+                        </div>
+                      </div>
+                      
+                      <div className="pt-2 border-t border-zinc-700">
+                        <div className="text-sm text-zinc-400 mb-2">AI Recommendations Applied:</div>
+                        <div className="flex flex-wrap gap-2">
+                          <span className="px-2 py-1 bg-blue-600/20 text-blue-300 text-xs rounded">
+                            Font: {FONT_MAP[params.font]?.label}
+                          </span>
+                          <span className="px-2 py-1 bg-blue-600/20 text-blue-300 text-xs rounded">
+                            Size: {params.heightMM}mm
+                          </span>
+                          <span className="px-2 py-1 bg-blue-600/20 text-blue-300 text-xs rounded">
+                            LEDs: {LED_COLOR_PRESETS[params.ledColorPreset]?.label}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Action Buttons */}
+                  <div className="flex gap-3">
+                    <button
+                      onClick={() => {
+                        setUploadedImage(null);
+                        setPhotoAnalysis(null);
+                      }}
+                      className="flex-1 py-2 px-4 bg-zinc-700 hover:bg-zinc-600 rounded-lg text-sm transition-all"
+                    >
+                      Upload Different Photo
+                    </button>
+                    {photoAnalysis && (
+                      <button
+                        onClick={() => setCurrentStep("TYPE")}
+                        className="flex-1 py-2 px-4 bg-blue-600 hover:bg-blue-500 rounded-lg text-sm font-medium transition-all"
+                      >
+                        Continue with Recommendations
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
           {currentStep === "TYPE" && (
             <div className="space-y-6">
               <div className="text-center mb-8">
@@ -1796,11 +2236,79 @@ export default function Speak23D() {
                   <div className="space-y-3">
                     <h4 className="font-medium text-zinc-300">Additional Options</h4>
                     
+                    {/* AR Mockup Section */}
+                    {uploadedImage && (
+                      <div className="bg-zinc-800 rounded-lg p-4 space-y-4">
+                        <h4 className="font-semibold flex items-center gap-2">
+                          🎯 AR Mockup Preview
+                        </h4>
+                        
+                        {/* Mockup Preview Canvas */}
+                        <div className="relative bg-zinc-900 rounded-lg overflow-hidden">
+                          <div className="w-full h-48 bg-zinc-800 rounded flex items-center justify-center text-zinc-400">
+                            <div className="text-center">
+                              <div className="text-2xl mb-2">🎯</div>
+                              <div className="text-sm">AR Mockup Preview</div>
+                              <div className="text-xs">Click to position sign</div>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Position and Scale Controls */}
+                        <div className="space-y-3">
+                          <div className="grid grid-cols-2 gap-3">
+                            <div>
+                              <label className="text-sm text-zinc-400">Position X: {mockupPosition.x.toFixed(0)}%</label>
+                              <input
+                                type="range"
+                                min="0"
+                                max="100"
+                                value={mockupPosition.x}
+                                onChange={(e) => setMockupPosition(prev => ({ ...prev, x: Number(e.target.value) }))}
+                                className="w-full accent-blue-500 h-2 bg-zinc-700 rounded-lg cursor-pointer"
+                              />
+                            </div>
+                            <div>
+                              <label className="text-sm text-zinc-400">Position Y: {mockupPosition.y.toFixed(0)}%</label>
+                              <input
+                                type="range"
+                                min="0"
+                                max="100"
+                                value={mockupPosition.y}
+                                onChange={(e) => setMockupPosition(prev => ({ ...prev, y: Number(e.target.value) }))}
+                                className="w-full accent-blue-500 h-2 bg-zinc-700 rounded-lg cursor-pointer"
+                              />
+                            </div>
+                          </div>
+                          
+                          <div>
+                            <label className="text-sm text-zinc-400">Scale: {Math.round(mockupScale * 100)}%</label>
+                            <input
+                              type="range"
+                              min="0.3"
+                              max="2"
+                              step="0.1"
+                              value={mockupScale}
+                              onChange={(e) => setMockupScale(Number(e.target.value))}
+                              className="w-full accent-blue-500 h-2 bg-zinc-700 rounded-lg cursor-pointer"
+                            />
+                          </div>
+                        </div>
+
+                        <button
+                          onClick={exportARMockup}
+                          className="w-full py-3 px-4 bg-purple-600 hover:bg-purple-500 rounded-lg font-semibold transition-all"
+                        >
+                          📱 Export AR Mockup
+                        </button>
+                      </div>
+                    )}
+                    
                     <button
                       onClick={exportMockup}
                       className="w-full py-3 px-4 bg-emerald-600 hover:bg-emerald-500 rounded-lg font-semibold transition-all"
                     >
-                      📸 Export Mockup (PNG)
+                      📸 Export 3D Mockup (PNG)
                     </button>
 
                     <button
@@ -1902,7 +2410,7 @@ export default function Speak23D() {
         <div className="p-4 border-t border-zinc-800 flex gap-3">
           <button
             onClick={prevStep}
-            disabled={currentStep === "TYPE"}
+            disabled={currentStep === "PHOTO"}
             className="flex-1 py-2 px-4 bg-zinc-700 hover:bg-zinc-600 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg transition-all"
           >
             ← Back
