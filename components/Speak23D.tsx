@@ -284,46 +284,14 @@ function autoWrapText(text: string, font: Font, params: Params): string[] {
 function createIndividualLetterMeshes(text: string, font: Font, params: Params): THREE.Mesh[] {
   if (!text.trim()) return [];
   
+  // Create text as one piece for preview (handles kerning/spacing correctly)
+  // Individual letter splitting happens at export time only
+  const wholeMesh = createTextMesh(text, font, params);
+  if (!wholeMesh) return [];
+  
   const isConnectedFont = FONT_MAP[params.font]?.connected || false;
-  
-  // For connected cursive fonts, treat as single piece
-  if (isConnectedFont) {
-    const wholeMesh = createTextMesh(text, font, params);
-    return wholeMesh ? [wholeMesh] : [];
-  }
-  
-  // For regular fonts, create individual character meshes
-  const chars = text.split('');
-  const letterMeshes: THREE.Mesh[] = [];
-  let xOffset = 0;
-  
-  // Calculate total width for centering
-  const totalWidth = checkTextWidth(text, font, params);
-  let currentX = -totalWidth / 2000; // Convert to meters and center
-  
-  for (const char of chars) {
-    if (char === ' ') {
-      // Add space width (approximate)
-      currentX += mm(params.heightMM * 0.3);
-      continue;
-    }
-    
-    const letterMesh = createTextMesh(char, font, params);
-    if (letterMesh) {
-      // Position letter
-      letterMesh.position.x = currentX;
-      letterMesh.userData = { originalText: char, isIndividualLetter: true };
-      letterMeshes.push(letterMesh);
-      
-      // Calculate next position with kerning
-      const letterGeo = letterMesh.geometry as THREE.BufferGeometry;
-      letterGeo.computeBoundingBox();
-      const letterWidth = (letterGeo.boundingBox?.max.x || 0) - (letterGeo.boundingBox?.min.x || 0);
-      currentX += letterWidth + mm(1); // 1mm kerning
-    }
-  }
-  
-  return letterMeshes;
+  wholeMesh.userData = { originalText: text, isConnectedFont };
+  return [wholeMesh];
 }
 
 function createMultiLineLetterMeshes(font: Font, params: Params): THREE.Mesh[] {
