@@ -16,14 +16,14 @@ import JSZip from "jszip";
 const MM = 0.001;
 
 // ═══ Font Map ════════════════════════════════════════════════════════════
-const FONT_MAP: Record<string, { label: string; file: string }> = {
+const FONT_MAP: Record<string, { label: string; file: string; connected?: boolean }> = {
   helvetiker: { label: "Helvetiker Bold", file: "/fonts/helvetiker_bold.typeface.json" },
   optimer: { label: "Optimer Bold", file: "/fonts/optimer_bold.typeface.json" },
-  greatvibes: { label: "Great Vibes (Connected Script)", file: "/fonts/great_vibes.typeface.json" },
+  greatvibes: { label: "Great Vibes (Connected Script)", file: "/fonts/great_vibes.typeface.json", connected: true },
   playfair: { label: "Playfair Display", file: "/fonts/playfair_display_bold.typeface.json" },
   blackops: { label: "Black Ops One", file: "/fonts/black_ops_one.typeface.json" },
   poiret: { label: "Poiret One", file: "/fonts/poiret_one.typeface.json" },
-  pacifico: { label: "Pacifico", file: "/fonts/pacifico.typeface.json" },
+  pacifico: { label: "Pacifico", file: "/fonts/pacifico.typeface.json", connected: true },
   alfaslab: { label: "Alfa Slab One", file: "/fonts/alfa_slab_one.typeface.json" },
   roboto: { label: "Roboto Bold", file: "/fonts/roboto_bold.typeface.json" },
 };
@@ -238,33 +238,170 @@ function createTextMesh(text: string, font: Font, params: Params): THREE.Mesh | 
   return mesh;
 }
 
+function checkTextWidth(text: string, font: Font, params: Params): number {
+  const geo = new TextGeometry(text, {
+    font, size: mm(params.heightMM), depth: mm(params.depthMM), curveSegments: 12,
+    bevelEnabled: true, bevelThickness: mm(0.5), bevelSize: mm(0.3), bevelOffset: 0, bevelSegments: 3
+  });
+  geo.computeBoundingBox();
+  const width = (geo.boundingBox?.max.x || 0) - (geo.boundingBox?.min.x || 0);
+  geo.dispose();
+  return width * 1000; // Convert to mm
+}
+
+function autoWrapText(text: string, font: Font, params: Params): string[] {
+  const maxWidth = 230; // 230mm max width for 256mm build plate
+  const words = text.split(' ');
+  const lines: string[] = [];
+  let currentLine = '';
+  
+  for (const word of words) {
+    const testLine = currentLine ? `${currentLine} ${word}` : word;
+    const testWidth = checkTextWidth(testLine, font, params);
+    
+    if (testWidth <= maxWidth) {
+      currentLine = testLine;
+    } else {
+      if (currentLine) {
+        lines.push(currentLine);
+        currentLine = word;
+      } else {
+        // Single word too long - split at midpoint
+        const midpoint = Math.ceil(word.length / 2);
+        lines.push(word.substring(0, midpoint));
+        currentLine = word.substring(midpoint);
+      }
+    }
+  }
+  
+  if (currentLine) {
+    lines.push(currentLine);
+  }
+  
+  return lines.length > 1 ? lines : [text]; // Return original if no splitting needed
+}
+
+function createIndividualLetterMeshes(text: string, font: Font, params: Params): THREE.Mesh[] {
+  if (!text.trim()) return [];
+  
+  const isConnectedFont = FONT_MAP[params.font]?.connected || false;
+  
+  // For connected cursive fonts, treat as single piece
+  if (isConnectedFont) {
+    const wholeMesh = createTextMesh(text, font, params);
+    return wholeMesh ? [wholeMesh] : [];
+  }
+  
+  // For regular fonts, create individual character meshes
+  const chars = text.split('');
+  const letterMeshes: THREE.Mesh[] = [];
+  let xOffset = 0;
+  
+  // Calculate total width for centering
+  const totalWidth = checkTextWidth(text, font, params);
+  let currentX = -totalWidth / 2000; // Convert to meters and center
+  
+  for (const char of chars) {
+    if (char === ' ') {
+      // Add space width (approximate)
+      currentX += mm(params.heightMM * 0.3);
+      continue;
+    }
+    
+    const letterMesh = createTextMesh(char, font, params);
+    if (letterMesh) {
+      // Position letter
+      letterMesh.position.x = currentX;
+      letterMesh.userData = { originalText: char, isIndividualLetter: true };
+      letterMeshes.push(letterMesh);
+      
+      // Calculate next position with kerning
+      const letterGeo = letterMesh.geometry as THREE.BufferGeometry;
+      letterGeo.computeBoundingBox();
+      const letterWidth = (letterGeo.boundingBox?.max.x || 0) - (letterGeo.boundingBox?.min.x || 0);
+      currentX += letterWidth + mm(1); // 1mm kerning
+    }
+  }
+  
+  return letterMeshes;
+}
+
 function createMultiLineLetterMeshes(font: Font, params: Params): THREE.Mesh[] {
   if (params.lines.length === 0) return [];
   const allMeshes: THREE.Mesh[] = [];
-  let totalHeight = 0;
-  const lineMeshes = params.lines.map(line => {
-    const mesh = createTextMesh(line.text, font, params);
-    if (!mesh) return null;
-    const box = new THREE.Box3().setFromObject(mesh);
-    const height = box.max.y - box.min.y;
-    totalHeight += height;
-    return { mesh, height, box, align: line.align };
-  }).filter(Boolean) as { mesh: THREE.Mesh; height: number; box: THREE.Box3; align: LineAlign }[];
-  totalHeight += (lineMeshes.length - 1) * mm(params.lineSpacingMM);
-
-  let offsetY = totalHeight / 2;
-  for (const { mesh, height, box, align } of lineMeshes) {
-    mesh.position.y = offsetY - height / 2;
-    if (align === "left") mesh.position.x = -box.min.x;
-    else if (align === "right") mesh.position.x = -box.max.x;
-    else mesh.position.x = -(box.min.x + box.max.x) / 2;
-    mesh.position.x *= params.scaleFactor;
-    mesh.position.y *= params.scaleFactor;
-    mesh.scale.setScalar(params.scaleFactor);
-    mesh.updateMatrixWorld(true);
-    offsetY -= height + mm(params.lineSpacingMM);
-    allMeshes.push(mesh);
+  const isNoBackplate = params.backplateShape === "none";
+  const isConnectedFont = FONT_MAP[params.font]?.connected || false;
+  
+  // Process each line with auto-wrapping
+  const processedLines: { text: string; align: LineAlign }[] = [];
+  for (const line of params.lines) {
+    if (line.text.trim()) {
+      // Auto-wrap long text
+      const wrappedLines = autoWrapText(line.text, font, params);
+      for (const wrappedText of wrappedLines) {
+        processedLines.push({ text: wrappedText, align: line.align });
+      }
+    }
   }
+  
+  if (processedLines.length === 0) return [];
+  
+  let totalHeight = 0;
+  const lineMeshes: Array<{
+    meshes: THREE.Mesh[];
+    height: number;
+    bounds: { min: THREE.Vector3; max: THREE.Vector3 };
+    align: LineAlign;
+  }> = [];
+  
+  // Create meshes for each line
+  for (const line of processedLines) {
+    let meshes: THREE.Mesh[];
+    
+    if (isNoBackplate && !isConnectedFont) {
+      // Create individual letter meshes for no-backplate (except cursive fonts)
+      meshes = createIndividualLetterMeshes(line.text, font, params);
+    } else {
+      // Create single mesh for whole line (backplate mode or cursive fonts)
+      const wholeMesh = createTextMesh(line.text, font, params);
+      meshes = wholeMesh ? [wholeMesh] : [];
+    }
+    
+    if (meshes.length > 0) {
+      const bounds = getBounds(meshes);
+      const height = bounds.max.y - bounds.min.y;
+      totalHeight += height;
+      lineMeshes.push({ meshes, height, bounds, align: line.align });
+    }
+  }
+  
+  totalHeight += (lineMeshes.length - 1) * mm(params.lineSpacingMM);
+  
+  // Position lines vertically
+  let offsetY = totalHeight / 2;
+  for (const { meshes, height, bounds, align } of lineMeshes) {
+    const lineY = offsetY - height / 2;
+    
+    // Calculate alignment offset
+    let alignX = 0;
+    if (align === "left") alignX = -bounds.min.x;
+    else if (align === "right") alignX = -bounds.max.x;
+    else alignX = -(bounds.min.x + bounds.max.x) / 2; // center
+    
+    // Position all meshes in this line
+    for (const mesh of meshes) {
+      mesh.position.y += lineY;
+      mesh.position.x += alignX;
+      mesh.position.x *= params.scaleFactor;
+      mesh.position.y *= params.scaleFactor;
+      mesh.scale.setScalar(params.scaleFactor);
+      mesh.updateMatrixWorld(true);
+      allMeshes.push(mesh);
+    }
+    
+    offsetY -= height + mm(params.lineSpacingMM);
+  }
+  
   return allMeshes;
 }
 
@@ -305,79 +442,182 @@ function addHaloLEDChannel(letterMesh: THREE.Mesh, params: Params): THREE.Mesh {
   
   const [channelWidth] = LED_CHANNELS[params.ledType];
   const box = new THREE.Box3().setFromObject(letterMesh);
+  const isConnectedFont = FONT_MAP[params.font]?.connected || false;
   
-  // Create halo channel around the perimeter
-  const haloChannel = new THREE.RingGeometry(
-    (Math.max(box.max.x - box.min.x, box.max.y - box.min.y) / 2) + mm(2),
-    (Math.max(box.max.x - box.min.x, box.max.y - box.min.y) / 2) + mm(2 + channelWidth),
-    32
-  );
-  
-  const haloMesh = new THREE.Mesh(
-    haloChannel, 
-    new THREE.MeshStandardMaterial({ 
-      color: 0x2a2a2a, 
-      metalness: 0.1, 
-      roughness: 0.7 
-    })
-  );
-  
-  haloMesh.position.set(
-    (box.min.x + box.max.x) / 2,
-    (box.min.y + box.max.y) / 2,
-    box.min.z - mm(1) // Behind letter
-  );
-  
-  return letterMesh; // For now, just return original - full implementation would union with halo
+  if (isConnectedFont) {
+    // For cursive fonts, create a single horizontal channel across the whole word
+    const channelGeo = new THREE.BoxGeometry(
+      (box.max.x - box.min.x) * 0.9, // 90% of word width
+      mm(channelWidth),
+      mm(2) // 2mm deep channel
+    );
+    
+    const channelMesh = new THREE.Mesh(channelGeo, new THREE.MeshStandardMaterial({ color: 0x2a2a2a }));
+    channelMesh.position.set(
+      (box.min.x + box.max.x) / 2,
+      (box.min.y + box.max.y) / 2 - (box.max.y - box.min.y) * 0.3, // Lower on the word
+      box.min.z - mm(1.5) // Behind letter
+    );
+    
+    try {
+      return csgSubtract(letterMesh, channelMesh);
+    } catch {
+      return letterMesh; // Fallback if CSG fails
+    }
+  } else {
+    // For individual letters, create halo channel around the perimeter
+    const haloChannel = new THREE.RingGeometry(
+      (Math.max(box.max.x - box.min.x, box.max.y - box.min.y) / 2) + mm(2),
+      (Math.max(box.max.x - box.min.x, box.max.y - box.min.y) / 2) + mm(2 + channelWidth),
+      32
+    );
+    
+    const haloMesh = new THREE.Mesh(
+      haloChannel, 
+      new THREE.MeshStandardMaterial({ 
+        color: 0x2a2a2a, 
+        metalness: 0.1, 
+        roughness: 0.7 
+      })
+    );
+    
+    haloMesh.position.set(
+      (box.min.x + box.max.x) / 2,
+      (box.min.y + box.max.y) / 2,
+      box.min.z - mm(1) // Behind letter
+    );
+    
+    return letterMesh; // For now, just return original - full implementation would union with halo
+  }
 }
 
 function addLetterMountingHoles(letterMesh: THREE.Mesh, params: Params): THREE.Mesh {
   if (!params.letterMounting) return letterMesh;
   
   const box = new THREE.Box3().setFromObject(letterMesh);
-  const holeRadius = mm(params.holeDiameterMM / 2);
-  const holeDepth = mm(params.depthMM + 2);
+  const isConnectedFont = FONT_MAP[params.font]?.connected || false;
   
-  // Add mounting holes at top and bottom of each letter
-  const topHole = cylMesh(params.holeDiameterMM / 2, params.depthMM + 2, 0x000000);
-  topHole.position.set(
-    (box.min.x + box.max.x) / 2,
-    box.max.y - mm(5),
-    (box.min.z + box.max.z) / 2
-  );
-  
-  const bottomHole = cylMesh(params.holeDiameterMM / 2, params.depthMM + 2, 0x000000);
-  bottomHole.position.set(
-    (box.min.x + box.max.x) / 2,
-    box.min.y + mm(5),
-    (box.min.z + box.max.z) / 2
-  );
-  
-  try {
-    let result = csgSubtract(letterMesh, topHole);
-    result = csgSubtract(result, bottomHole);
-    return result;
-  } catch {
-    return letterMesh;
+  if (isConnectedFont) {
+    // For cursive fonts, add 2-3 mounting points across the whole word
+    const wordWidth = box.max.x - box.min.x;
+    const holes: THREE.Mesh[] = [];
+    
+    // Left mounting point
+    const leftHole = cylMesh(params.holeDiameterMM / 2, params.depthMM + 2, 0x000000);
+    leftHole.position.set(
+      box.min.x + wordWidth * 0.2,
+      (box.min.y + box.max.y) / 2,
+      (box.min.z + box.max.z) / 2
+    );
+    holes.push(leftHole);
+    
+    // Right mounting point
+    const rightHole = cylMesh(params.holeDiameterMM / 2, params.depthMM + 2, 0x000000);
+    rightHole.position.set(
+      box.min.x + wordWidth * 0.8,
+      (box.min.y + box.max.y) / 2,
+      (box.min.z + box.max.z) / 2
+    );
+    holes.push(rightHole);
+    
+    // Center mounting point for longer words
+    if (wordWidth > mm(150)) {
+      const centerHole = cylMesh(params.holeDiameterMM / 2, params.depthMM + 2, 0x000000);
+      centerHole.position.set(
+        (box.min.x + box.max.x) / 2,
+        (box.min.y + box.max.y) / 2,
+        (box.min.z + box.max.z) / 2
+      );
+      holes.push(centerHole);
+    }
+    
+    try {
+      let result = letterMesh;
+      for (const hole of holes) {
+        result = csgSubtract(result, hole);
+      }
+      return result;
+    } catch {
+      return letterMesh; // Fallback if CSG fails
+    }
+  } else {
+    // For individual letters, add mounting holes at top and bottom
+    const topHole = cylMesh(params.holeDiameterMM / 2, params.depthMM + 2, 0x000000);
+    topHole.position.set(
+      (box.min.x + box.max.x) / 2,
+      box.max.y - mm(5),
+      (box.min.z + box.max.z) / 2
+    );
+    
+    const bottomHole = cylMesh(params.holeDiameterMM / 2, params.depthMM + 2, 0x000000);
+    bottomHole.position.set(
+      (box.min.x + box.max.x) / 2,
+      box.min.y + mm(5),
+      (box.min.z + box.max.z) / 2
+    );
+    
+    try {
+      let result = csgSubtract(letterMesh, topHole);
+      result = csgSubtract(result, bottomHole);
+      return result;
+    } catch {
+      return letterMesh;
+    }
   }
 }
 
 function computeLetterMountingPoints(letters: THREE.Mesh[], params: Params): MountingPoint[] {
   const points: MountingPoint[] = [];
-  letters.forEach((letter, i) => {
-    const box = new THREE.Box3().setFromObject(letter);
-    const char = letter.userData?.originalText || String.fromCharCode(65 + i);
+  const isConnectedFont = FONT_MAP[params.font]?.connected || false;
+  
+  if (isConnectedFont && letters.length > 0) {
+    // For cursive fonts, compute mounting points for the whole word
+    const allBounds = getBounds(letters);
+    const wordWidth = allBounds.max.x - allBounds.min.x;
+    const wordText = letters.map(l => l.userData?.originalText || '').join('');
+    
+    // Left mounting point
     points.push({
-      x: ((box.min.x + box.max.x) / 2) * 1000,
-      y: (box.max.y - mm(5)) * 1000,
-      letter: `${char}-top`
+      x: (allBounds.min.x + wordWidth * 0.2) * 1000,
+      y: ((allBounds.min.y + allBounds.max.y) / 2) * 1000,
+      letter: `${wordText}-left`
     });
+    
+    // Right mounting point
     points.push({
-      x: ((box.min.x + box.max.x) / 2) * 1000,
-      y: (box.min.y + mm(5)) * 1000,
-      letter: `${char}-bottom`
+      x: (allBounds.min.x + wordWidth * 0.8) * 1000,
+      y: ((allBounds.min.y + allBounds.max.y) / 2) * 1000,
+      letter: `${wordText}-right`
     });
-  });
+    
+    // Center mounting point for longer words (>150mm)
+    if (wordWidth > mm(150)) {
+      points.push({
+        x: ((allBounds.min.x + allBounds.max.x) / 2) * 1000,
+        y: ((allBounds.min.y + allBounds.max.y) / 2) * 1000,
+        letter: `${wordText}-center`
+      });
+    }
+  } else {
+    // For individual letters, add top and bottom mounting points
+    letters.forEach((letter, i) => {
+      if (letter.userData?.isIndividualLetter) {
+        const box = new THREE.Box3().setFromObject(letter);
+        const char = letter.userData?.originalText || String.fromCharCode(65 + i);
+        points.push({
+          x: ((box.min.x + box.max.x) / 2) * 1000,
+          y: (box.max.y - mm(5)) * 1000,
+          letter: `${char}-top`
+        });
+        points.push({
+          x: ((box.min.x + box.max.x) / 2) * 1000,
+          y: (box.min.y + mm(5)) * 1000,
+          letter: `${char}-bottom`
+        });
+      }
+    });
+  }
+  
   return points;
 }
 
