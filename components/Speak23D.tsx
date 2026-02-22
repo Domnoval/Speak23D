@@ -87,19 +87,41 @@ interface Params {
   ledColorPreset: string;
   ledCustomColor: string;
   ledBrightness: number;
+  // Letter color/material
+  letterColor: string;
+  letterCustomColor: string;
 }
 
+// ═══ Letter Color/Material Options ════════════════════════════════════════
+const LETTER_COLORS: Record<string, { label: string; color: string; roughness: number; metalness: number }> = {
+  black_matte: { label: "Black (Matte)", color: "#1a1a1a", roughness: 0.9, metalness: 0.0 },
+  black_gloss: { label: "Black (Gloss)", color: "#2a2a2a", roughness: 0.1, metalness: 0.1 },
+  white_matte: { label: "White (Matte)", color: "#f5f5f5", roughness: 0.8, metalness: 0.0 },
+  brushed_metal: { label: "Brushed Metal", color: "#c0c0c0", roughness: 0.3, metalness: 0.9 },
+  bronze: { label: "Bronze/Brass", color: "#cd7f32", roughness: 0.4, metalness: 0.8 },
+  custom: { label: "Custom Color", color: "#4a9eff", roughness: 0.5, metalness: 0.1 },
+};
+
+// ═══ Build Types ═════════════════════════════════════════════════════════
+type BuildType = "floating" | "backplate" | "housing" | "rock_mount";
+const BUILD_TYPES: Record<BuildType, { label: string; icon: string; description: string }> = {
+  floating: { label: "Floating Letters", icon: "📝", description: "Individual letters mounted to wall" },
+  backplate: { label: "Backplate", icon: "🔲", description: "Letters on a mounting plate" },
+  housing: { label: "Full Housing", icon: "📦", description: "Complete enclosure with LED channels" },
+  rock_mount: { label: "Rock Mount", icon: "🪨", description: "Individual letters mounted on natural stone/rock with LED backlighting" },
+};
+
 const DEFAULT_PARAMS: Params = {
-  lines: [{ text: "1234", align: "center" }],
-  font: "helvetiker",
+  lines: [{ text: "1234", align: "center" }], // Kurt's house number default
+  font: "helvetiker", // Helvetiker Bold - clean, readable
   heightMM: 80,
-  depthMM: 12,
+  depthMM: 15, // 15mm depth for rock mounting structural integrity
   paddingMM: 8,
   wallThickMM: 3,
   scaleFactor: 1.0,
-  housing: true,
+  housing: false, // Default to rock mount (no housing)
   ledType: "strip_5v",
-  backplateShape: "rectangle",
+  backplateShape: "none", // Rock mount = no backplate
   cornerRadiusMM: 4,
   mountType: "2hole",
   holeDiameterMM: 5,
@@ -107,14 +129,17 @@ const DEFAULT_PARAMS: Params = {
   weatherSeal: false,
   reflector: "none",
   showMountingPoints: false,
-  letterMounting: false,
-  noBackplateMountType: "standoff",
-  haloLED: false,
+  letterMounting: true, // Default to flush mount for rock
+  noBackplateMountType: "flush", // Screws into rock
+  haloLED: true, // Default ON for rock mount
   hollowInterior: false,
-  ledOn: false,
-  ledColorPreset: "warm_white",
+  ledOn: true, // Default LEDs ON for rock mount
+  ledColorPreset: "warm_white", // Warm white default
   ledCustomColor: "#FFE4B5",
   ledBrightness: 0.8,
+  // New params for letter color
+  letterColor: "black_matte", // Kurt's black matte default
+  letterCustomColor: "#1a1a1a",
 };
 
 // ═══ Helper Functions ════════════════════════════════════════════════════
@@ -196,7 +221,18 @@ function createTextMesh(text: string, font: Font, params: Params): THREE.Mesh | 
     bevelEnabled: true, bevelThickness: mm(0.5), bevelSize: mm(0.3), bevelOffset: 0, bevelSegments: 3
   });
   geo.computeBoundingBox();
-  const mesh = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.3 }));
+  
+  // Apply letter color/material
+  const colorConfig = LETTER_COLORS[params.letterColor];
+  const finalColor = params.letterColor === "custom" ? params.letterCustomColor : colorConfig?.color || "#ffffff";
+  const roughness = colorConfig?.roughness || 0.3;
+  const metalness = colorConfig?.metalness || 0.1;
+  
+  const mesh = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ 
+    color: finalColor, 
+    roughness, 
+    metalness 
+  }));
   mesh.userData = { originalText: text };
   return mesh;
 }
@@ -544,16 +580,84 @@ function buildEnvironment(scene: THREE.Scene, envType: EnvironmentType, wallText
     );
     wall.position.z = signBounds.max.z + mm(50);
     envGroup.add(wall);
+  } else if (envType === "rock") {
+    // Enhanced rock environment for Kurt's product
+    const rockW = Math.max(signWidth * 2.5, 0.4);
+    const rockH = Math.max(signHeight * 2, 0.3);
+    const rockD = 0.2;
+    
+    // Main rock/boulder with natural stone texture
+    const rock = new THREE.Mesh(
+      new THREE.BoxGeometry(rockW, rockH, rockD),
+      new THREE.MeshStandardMaterial({
+        color: isNight ? 0x4a4a4a : 0x666666, // Natural stone gray
+        roughness: 0.95, // Very rough natural stone texture
+        metalness: 0.0,
+        // Add some variation for natural look
+        vertexColors: false
+      })
+    );
+    
+    // Position rock behind letters with slight curve approximation
+    rock.position.set(
+      (signBounds.min.x + signBounds.max.x) / 2,
+      (signBounds.min.y + signBounds.max.y) / 2,
+      signBounds.max.z + rockD / 2
+    );
+    
+    // Add slight rotation for natural look
+    rock.rotation.y = (Math.random() - 0.5) * 0.1;
+    rock.rotation.z = (Math.random() - 0.5) * 0.05;
+    
+    envGroup.add(rock);
+    
+    // Add smaller accent rocks
+    for (let i = 0; i < 3; i++) {
+      const accentRock = new THREE.Mesh(
+        new THREE.SphereGeometry(0.03 + Math.random() * 0.02, 8, 6),
+        new THREE.MeshStandardMaterial({
+          color: 0x555555,
+          roughness: 0.9,
+          metalness: 0.0
+        })
+      );
+      accentRock.position.set(
+        (Math.random() - 0.5) * rockW * 1.5,
+        signBounds.min.y - rockH * 0.3 - Math.random() * 0.1,
+        signBounds.max.z + 0.05
+      );
+      envGroup.add(accentRock);
+    }
   }
   
-  // Ground plane
+  // Ground plane with appropriate texture
+  let groundColor = isNight ? 0x1a1a1a : 0x4a4a4a;
+  if (envType === "rock") {
+    // Mulch/garden ground texture for rock environment
+    groundColor = isNight ? 0x2d1810 : 0x4a3221; // Brown mulch color
+  }
+  
   const ground = new THREE.Mesh(
     new THREE.PlaneGeometry(2, 2),
-    new THREE.MeshStandardMaterial({ color: isNight ? 0x1a1a1a : 0x4a4a4a })
+    new THREE.MeshStandardMaterial({ 
+      color: groundColor,
+      roughness: envType === "rock" ? 0.95 : 0.8 // Rougher for mulch
+    })
   );
   ground.rotation.x = -Math.PI / 2;
   ground.position.y = signBounds.min.y - signHeight * 0.5;
   envGroup.add(ground);
+  
+  // Add warm outdoor lighting for rock environment
+  if (envType === "rock" && isNight) {
+    const warmLight = new THREE.PointLight(0xffaa44, 0.3, 1.0);
+    warmLight.position.set(
+      (signBounds.min.x + signBounds.max.x) / 2 + 0.2,
+      (signBounds.min.y + signBounds.max.y) / 2,
+      signBounds.min.z - 0.1
+    );
+    envGroup.add(warmLight);
+  }
   
   scene.add(envGroup);
 }
@@ -598,7 +702,27 @@ function getRecommendations(params: Params) {
   const letterHeight = params.heightMM;
   const isLarge = letterHeight > 120;
   const isSmall = letterHeight < 60;
+  const isRockMount = params.backplateShape === "none" && params.noBackplateMountType === "flush" && params.haloLED;
   
+  if (isRockMount) {
+    // Rock Mount specific recommendations
+    return {
+      font: "Clean sans-serif fonts (Helvetiker, Roboto) provide the best readability against textured rock surfaces. Avoid thin scripts that may get lost against natural stone.",
+      material: "ASA or PETG in black for maximum UV resistance and contrast against stone. ASA handles temperature swings better for year-round outdoor exposure.",
+      nozzle: letterHeight > 100 ? 
+        "0.6mm or 0.8mm nozzle recommended for rock mounting - faster printing and stronger layer adhesion for outdoor durability." :
+        "0.4mm nozzle works well. Consider 0.6mm for better strength in outdoor rock applications.",
+      led: "Warm white LED strip behind each letter creates a beautiful halo glow on the rock face — most visible and dramatic at dusk/night. Cool white can appear harsh against natural stone.",
+      mounting: "Use masonry drill bit (5/16\") and plastic anchors. Pre-drill holes in rock, secure with stainless steel screws. Apply outdoor-rated adhesive (E6000 or Gorilla Clear) as backup.",
+      depth: "15-20mm depth recommended for rock mounting — provides structural rigidity and adequate space for LED channels. Current depth looks good!",
+      waterproofing: "Seal LED connections with heat shrink tubing and silicone. Use outdoor-rated LED strip (IP65+). Consider small solar panel + battery for remote rocks.",
+      structural: params.depthMM < 15 ?
+        "For rock mounting, increase depth to 15mm+ for better structural integrity and LED channel space." :
+        "Excellent depth for rock mounting! Provides strong mounting points and adequate LED channels."
+    };
+  }
+  
+  // Standard recommendations for non-rock builds
   return {
     font: isSmall ? 
       "For small letters, choose bold fonts like Black Ops One or Helvetiker Bold for better printability." :
@@ -625,26 +749,90 @@ function getRecommendations(params: Params) {
 
 function generateAssemblyInstructions(params: Params): string {
   const isNoBackplate = params.backplateShape === "none";
+  const isRockMount = isNoBackplate && params.noBackplateMountType === "flush" && params.haloLED;
   const text = params.lines.map(l => l.text).join(" ");
   const font = FONT_MAP[params.font]?.label || params.font;
+  const letterColor = LETTER_COLORS[params.letterColor]?.label || "Custom";
   
   let instructions = `# Assembly Instructions - "${text}"
 
 ## Overview
 - Font: ${font}
 - Dimensions: ${params.heightMM}mm height × ${params.depthMM}mm depth
-- Material: Print in PETG or PLA+ for durability
+- Letter Color: ${letterColor}${isRockMount ? " (optimized for rock contrast)" : ""}
+- Build Type: ${isRockMount ? "Rock Mount - Individual letters for natural stone" : isNoBackplate ? "Floating Letters" : params.housing ? "Full Housing" : "Backplate"}
+- Material: ${isRockMount ? "ASA or PETG in black for maximum UV resistance" : "Print in PETG or PLA+ for durability"}
 - LED Type: ${params.ledOn ? LED_CHANNELS[params.ledType][1] : "No LEDs"}
 
 ## Print Settings
 - Layer Height: 0.2-0.3mm
-- Infill: 20% (letters), 15% (housing)
+- Infill: ${isRockMount ? "25%" : "20%"} (letters)${isRockMount ? " — increased for outdoor durability" : ""}${params.housing ? ", 15% (housing)" : ""}
 - Supports: Auto-generate for overhangs >45°
-- Nozzle: 0.4mm standard, 0.6mm for letters >100mm
+- Nozzle: 0.4mm standard, ${isRockMount ? "0.6mm recommended for outdoor strength" : "0.6mm for letters >100mm"}
 
 `;
 
-  if (isNoBackplate) {
+  if (isRockMount) {
+    instructions += `## Rock Mount Installation (Kurt's Landscaping Method)
+**Perfect for landscaping rocks with 3D-printed house numbers + LED backlighting**
+
+### Materials Needed
+- Masonry drill bit (5/16" / 8mm diameter)
+- Plastic masonry anchors (appropriate for 5/16" holes)
+- Stainless steel screws (M5 x 35mm recommended)
+- Outdoor-rated adhesive (E6000 or Gorilla Clear as backup)
+- LED strip: ${LED_CHANNELS[params.ledType][1]}
+- Heat shrink tubing + silicone sealant
+- Power supply: ${params.ledType.includes("5v") ? "5V" : "12V"} DC, 60W minimum (or solar panel kit)
+
+### Rock Drilling Guide
+1. **Mark positions** using printed template (drill holes as marked)
+2. **Drill pilot holes** at marked positions:
+   - Use masonry bit at slow speed (300-500 RPM)
+   - Apply steady pressure, let bit do the work
+   - Drill 30-35mm deep for secure hold
+   - Clear debris frequently with compressed air
+3. **Test fit** - holes should be snug for anchors
+
+### LED Installation (Halo Effect)
+1. **Route LED strips** in recessed channels on letter backs
+2. **Connect in parallel** for even brightness across all letters
+3. **Waterproof connections**:
+   - Use heat shrink tubing on all solder joints  
+   - Apply marine-grade silicone over connections
+   - Route main power cable behind/under rock
+4. **Test all LEDs** before final mounting
+
+### Letter Mounting Process
+1. **Clean rock surface** - remove dirt, moss, loose material
+2. **Apply adhesive** to letter backs (thin, even layer)
+3. **Install anchors** in drilled holes - tap until flush
+4. **Position letters** - check alignment and level
+5. **Secure with screws** - don't overtighten (can crack plastic)
+6. **Final LED test** - verify all letters illuminate properly
+
+### Power Options
+- **AC Power**: Weatherproof transformer, GFCI protected outlet
+- **Solar Power** (recommended for remote rocks): 
+  - 20W solar panel minimum
+  - 12V 20Ah battery pack
+  - Charge controller included in most kits
+  - Position panel for 6+ hours sun exposure
+
+### Weather Protection
+- All electrical connections must be IP65+ rated
+- Consider clear protective coating over letters (marine polyurethane)
+- Inspect LED connections seasonally
+- Clean letters with soft brush and mild soap annually
+
+### Troubleshooting Rock Mount
+- **Letters loose**: Add more adhesive, ensure anchors are fully seated
+- **Uneven illumination**: Check LED strip continuity, verify connections  
+- **Water intrusion**: Re-seal all connections, check for cracks in letters
+- **Solar not charging**: Clean panel, verify battery connections, check for shade
+
+`;
+  } else if (isNoBackplate) {
     instructions += `## Individual Letter Mounting
 ${params.noBackplateMountType === "adhesive" ? 
   "**VHB Adhesive Mounting** (strongest bond, permanent)" :
@@ -887,6 +1075,14 @@ export default function Speak23D() {
       setParams(p => ({ ...p, letterMounting: true }));
     }
   }, [params.backplateShape, params.letterMounting, params.noBackplateMountType]);
+
+  // Auto-set rock environment when rock mount is selected
+  useEffect(() => {
+    const isRockMount = params.backplateShape === "none" && params.noBackplateMountType === "flush" && params.haloLED;
+    if (isRockMount && envType !== "rock") {
+      setEnvType("rock");
+    }
+  }, [params.backplateShape, params.noBackplateMountType, params.haloLED, envType]);
 
   const loadFont = useCallback((fontKey: string, callback: (font: Font) => void) => {
     if (fontCacheRef.current[fontKey]) {
@@ -1624,6 +1820,7 @@ export default function Speak23D() {
   };
 
   const isNoBackplate = params.backplateShape === "none";
+  const isRockMount = isNoBackplate && params.noBackplateMountType === "flush" && params.haloLED;
 
   return (
     <div className="min-h-screen bg-zinc-950 text-white flex flex-col lg:flex-row">
@@ -1921,9 +2118,12 @@ export default function Speak23D() {
                   onClick={() => {
                     updateParam("backplateShape", "none");
                     updateParam("housing", false);
+                    updateParam("letterMounting", true);
+                    updateParam("noBackplateMountType", "standoff");
+                    updateParam("haloLED", false);
                   }}
                   className={`w-full p-4 rounded-lg border-2 transition-all ${
-                    isNoBackplate 
+                    isNoBackplate && params.noBackplateMountType !== "flush"
                       ? "border-blue-400 bg-blue-400/10" 
                       : "border-zinc-700 bg-zinc-800 hover:border-zinc-600"
                   }`}
@@ -1941,6 +2141,8 @@ export default function Speak23D() {
                   onClick={() => {
                     updateParam("backplateShape", "rectangle");
                     updateParam("housing", false);
+                    updateParam("letterMounting", false);
+                    updateParam("haloLED", false);
                   }}
                   className={`w-full p-4 rounded-lg border-2 transition-all ${
                     !isNoBackplate && !params.housing 
@@ -1961,6 +2163,8 @@ export default function Speak23D() {
                   onClick={() => {
                     updateParam("housing", true);
                     updateParam("backplateShape", "rectangle");
+                    updateParam("letterMounting", false);
+                    updateParam("haloLED", false);
                   }}
                   className={`w-full p-4 rounded-lg border-2 transition-all ${
                     params.housing 
@@ -1976,17 +2180,130 @@ export default function Speak23D() {
                     </div>
                   </div>
                 </button>
+
+                {/* NEW: Rock Mount Option */}
+                <button
+                  onClick={() => {
+                    updateParam("backplateShape", "none");
+                    updateParam("housing", false);
+                    updateParam("letterMounting", true);
+                    updateParam("noBackplateMountType", "flush");
+                    updateParam("haloLED", true);
+                    updateParam("ledOn", true);
+                    updateParam("ledColorPreset", "warm_white");
+                    updateParam("letterColor", "black_matte");
+                    updateParam("depthMM", Math.max(15, params.depthMM)); // Ensure adequate depth
+                    // Set rock environment as default
+                    setEnvType("rock");
+                  }}
+                  className={`w-full p-4 rounded-lg border-2 transition-all ${
+                    isNoBackplate && params.noBackplateMountType === "flush" && params.haloLED
+                      ? "border-blue-400 bg-blue-400/10" 
+                      : "border-zinc-700 bg-zinc-800 hover:border-zinc-600"
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="text-2xl">🪨</div>
+                    <div className="text-left">
+                      <h3 className="font-semibold">Rock Mount</h3>
+                      <p className="text-sm text-zinc-400">Individual letters mounted on natural stone/rock with LED backlighting</p>
+                    </div>
+                  </div>
+                </button>
               </div>
 
+              {/* Letter Color/Material Selection */}
+              <div className="space-y-4 pt-4 border-t border-zinc-700">
+                <h3 className="font-semibold">Letter Color & Material</h3>
+                <div className="grid grid-cols-2 gap-2">
+                  {Object.entries(LETTER_COLORS).map(([colorKey, colorConfig]) => (
+                    <button
+                      key={colorKey}
+                      onClick={() => updateParam("letterColor", colorKey)}
+                      className={`p-3 rounded-lg border-2 transition-all ${
+                        params.letterColor === colorKey
+                          ? "border-blue-400 bg-blue-400/10"
+                          : "border-zinc-700 bg-zinc-800 hover:border-zinc-600"
+                      }`}
+                    >
+                      <div className="flex items-center gap-2">
+                        <div 
+                          className="w-4 h-4 rounded-full border border-zinc-600" 
+                          style={{ backgroundColor: colorKey === "custom" ? params.letterCustomColor : colorConfig.color }}
+                        />
+                        <span className="text-sm font-medium">{colorConfig.label}</span>
+                      </div>
+                      {/* Show "Kurt's Choice" for black matte */}
+                      {colorKey === "black_matte" && (
+                        <div className="text-xs text-green-400 mt-1">⭐ Kurt's Choice</div>
+                      )}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Custom color picker */}
+                {params.letterColor === "custom" && (
+                  <div className="space-y-2">
+                    <label className="text-sm text-zinc-300">Custom Letter Color</label>
+                    <input
+                      type="color"
+                      value={params.letterCustomColor}
+                      onChange={(e) => updateParam("letterCustomColor", e.target.value)}
+                      className="w-full h-10 rounded-lg bg-zinc-800 border border-zinc-700"
+                    />
+                  </div>
+                )}
+              </div>
+
+              {/* AI Recommendations for Rock Mount */}
+              {isRockMount && (
+                <div className="space-y-4 pt-4 border-t border-zinc-700">
+                  <h3 className="font-semibold text-green-400 flex items-center gap-2">
+                    <span>🤖</span> Rock Mount Recommendations
+                  </h3>
+                  <div className="bg-zinc-800 rounded-lg p-4 space-y-3">
+                    {(() => {
+                      const recommendations = getRecommendations(params);
+                      return (
+                        <>
+                          <div>
+                            <div className="text-sm font-medium text-green-300 mb-1">📝 Material:</div>
+                            <div className="text-sm text-zinc-300">{recommendations.material}</div>
+                          </div>
+                          <div>
+                            <div className="text-sm font-medium text-yellow-300 mb-1">💡 LED:</div>
+                            <div className="text-sm text-zinc-300">{recommendations.led}</div>
+                          </div>
+                          <div>
+                            <div className="text-sm font-medium text-blue-300 mb-1">🔧 Mounting:</div>
+                            <div className="text-sm text-zinc-300">{recommendations.mounting}</div>
+                          </div>
+                          <div>
+                            <div className="text-sm font-medium text-purple-300 mb-1">📏 Depth:</div>
+                            <div className="text-sm text-zinc-300">{recommendations.depth}</div>
+                          </div>
+                        </>
+                      );
+                    })()}
+                  </div>
+                </div>
+              )}
+
               {/* Sub-options based on selection */}
-              {isNoBackplate && (
+              {isNoBackplate && !isRockMount && (
                 <div className="space-y-4 pt-4 border-t border-zinc-700">
                   <h3 className="font-semibold">Mounting Method</h3>
                   <div className="grid grid-cols-3 gap-2">
                     {(["flush", "standoff", "adhesive"] as NoBackplateMountType[]).map((mount) => (
                       <button
                         key={mount}
-                        onClick={() => updateParam("noBackplateMountType", mount)}
+                        onClick={() => {
+                          updateParam("noBackplateMountType", mount);
+                          // Disable halo LED for non-rock mounts
+                          if (mount !== "flush") {
+                            updateParam("haloLED", false);
+                          }
+                        }}
                         className={`p-3 rounded-lg text-sm transition-all ${
                           params.noBackplateMountType === mount
                             ? "bg-blue-600 text-white"
@@ -1999,6 +2316,23 @@ export default function Speak23D() {
                         <div className="capitalize">{mount}</div>
                       </button>
                     ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Rock Mount specific options */}
+              {isRockMount && (
+                <div className="space-y-4 pt-4 border-t border-zinc-700">
+                  <h3 className="font-semibold text-amber-400 flex items-center gap-2">
+                    🪨 Rock Mount Configuration
+                  </h3>
+                  <div className="bg-amber-900/20 border border-amber-700/50 rounded-lg p-3">
+                    <div className="text-sm text-amber-200 space-y-2">
+                      <div><strong>✓ Mounting:</strong> Flush screws into rock with masonry anchors</div>
+                      <div><strong>✓ LEDs:</strong> Warm white halo effect behind each letter</div>
+                      <div><strong>✓ Material:</strong> Black matte finish for maximum rock contrast</div>
+                      <div><strong>✓ Environment:</strong> Rock/boulder preview automatically selected</div>
+                    </div>
                   </div>
                 </div>
               )}
