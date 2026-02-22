@@ -81,6 +81,7 @@ interface Params {
   letterMounting: boolean;
   noBackplateMountType: NoBackplateMountType;
   haloLED: boolean;
+  hollowInterior: boolean;
   // LED visualization
   ledOn: boolean;
   ledColorPreset: string;
@@ -109,6 +110,7 @@ const DEFAULT_PARAMS: Params = {
   letterMounting: true,
   noBackplateMountType: "flush",
   haloLED: false,
+  hollowInterior: false,
   ledOn: true,
   ledColorPreset: "warm_white",
   ledCustomColor: "#FF00FF",
@@ -125,9 +127,12 @@ const LED_CHANNELS: Record<string, [number, number]> = {
 
 interface Recommendation {
   font: string;
-  size: string;
-  style: string;
   material: string;
+  nozzle: string;
+  orientation: string;
+  batch: string;
+  structural: string;
+  hollow?: string;
 }
 
 function getRecommendations(params: Params): Recommendation {
@@ -138,63 +143,82 @@ function getRecommendations(params: Params): Recommendation {
   const wordCount = allText.split(/\s+/).filter(Boolean).length;
   const isName = wordCount >= 1 && wordCount <= 3 && !isNumbersOnly && /[a-zA-Z]/.test(allText);
   const isNoBackplate = params.backplateShape === "none";
+  const isOutdoor = params.heightMM >= 80; // Assume larger signs are outdoor-bound
+  const isLarge = params.heightMM >= 150;
+  const isVeryLarge = params.heightMM >= 300;
+  const thinFont = params.font === "poiret";
+  const connectedScript = params.font === "greatvibes";
 
+  // Font recommendations with structural considerations
   let font = "";
-  if (isNoBackplate && params.font === "poiret" && params.depthMM < 15) {
-    font = "⚠️ WARNING: Poiret One is fragile for standalone letters under 15mm depth. Use Helvetiker Bold or increase depth to 15mm+ for structural integrity.";
+  if (isNoBackplate && thinFont && params.depthMM < 15) {
+    font = "⚠️ WARNING: Poiret One is fragile as standalone letters under 15mm depth. Increase depth to 15mm+ or use a bolder font like Helvetiker Bold for structural integrity.";
   } else if (isNoBackplate && params.depthMM < 15) {
-    font = "⚠️ Standalone letters: Recommend 15mm+ depth for structural integrity. Bold fonts (Helvetiker, Black Ops One) are strongest. Great Vibes connected script provides structural joining between letters.";
+    font = "⚠️ Standalone letters: Recommend 15mm+ depth for structural integrity. Bold fonts (Helvetiker, Black Ops One) are strongest.";
+  } else if (connectedScript) {
+    font = "Great Vibes connected script: Letters join together for structural integrity — excellent for no-backplate mounting. Creates elegant cursive appearance.";
   } else if (isNumbersOnly) {
-    font = "House numbers → clean sans-serif (Helvetiker) or slab serif (Alfa Slab One) for maximum readability at distance.";
-  } else if (isName && isShort) {
-    font = "Short name/word → bold display fonts work great. Try Black Ops One for modern, Playfair Display for elegant, or Great Vibes for connected script elegance.";
-  } else if (isName && !isShort) {
-    font = "Longer name → use a compact, readable font. Helvetiker or Optimer Bold keeps it clean. Great Vibes connects letters for strength.";
-  } else if (isLong) {
-    font = "Long text → needs a compact font. Helvetiker Bold or Poiret One (thin strokes) keep overall width manageable.";
-  } else if (isShort) {
-    font = "Short text → bold stencil/display fonts shine. Black Ops One or Alfa Slab One make a strong statement.";
+    font = "House numbers → clean sans-serif (Helvetiker) or slab serif (Alfa Slab One) for maximum readability at distance. Bold fonts better for outdoor visibility.";
+  } else if (thinFont && isLarge) {
+    font = "Poiret One: Elegant thin strokes but requires adequate depth (15mm+) for larger letters to prevent breaking during installation.";
   } else {
-    font = "General text → Helvetiker Bold is the safest all-rounder. Optimer Bold for a slightly warmer feel.";
+    font = "Font choice looks good. Bold fonts (Helvetiker, Black Ops One) are strongest for standalone letters. Script fonts (Great Vibes) connect for added structure.";
   }
 
-  let size = "";
-  if (isNumbersOnly) {
-    size = "Street-visible house numbers: 150mm+ height. Door-mounted: 80–120mm. Mailbox: 50–80mm.";
-  } else {
-    size = "Names/signs: 80–120mm for door-level viewing. 150mm+ if mounting high or viewing from distance. For indoor decor, 50–80mm works fine.";
-  }
-
-  let style = "";
-  const shape = params.backplateShape;
-  if (shape === "none") {
-    let mountAdvice = "";
-    if (params.noBackplateMountType === "flush") {
-      mountAdvice = " Flush mount (hidden screws) gives clean look. Drilling template included.";
-    } else if (params.noBackplateMountType === "standoff") {
-      mountAdvice = " Standoff mount creates premium floating effect with halo shadows.";
-    } else {
-      mountAdvice = " Adhesive mount for lightweight indoor signs only.";
-    }
-    style = `No backplate = modern floating letter look. Works best with thick, bold fonts (15mm+ depth).${mountAdvice} ${allText.length * params.heightMM < 1500 ? "Good size for halo LED strips." : "Too large for easy LED strip routing."}`;
-  } else if (shape === "rounded_rect") {
-    style = "Rounded rectangle = modern/contemporary feel. Pair with sans-serif fonts. Great for new builds.";
-  } else if (shape === "arch") {
-    style = "Arch shape = traditional/classical. Pairs beautifully with serif fonts like Playfair Display.";
-  } else if (shape === "oval") {
-    style = "Oval = soft, welcoming. Works with script fonts (Great Vibes, Pacifico) or classic serifs.";
-  } else {
-    style = "Rectangle = clean and universal. Modern home → pair with sans-serif. Traditional → serif works too.";
-  }
-
+  // Material recommendations based on use case and dimensions
   let material = "";
-  if (params.housing) {
-    material = "Outdoor use: Print housing in ASA or PETG for UV/weather resistance. Indoor: PLA is fine. Dark filament + light diffuser = best LED contrast. White/natural diffuser at 0.8mm for even glow.";
+  if (isOutdoor || isLarge) {
+    if (params.depthMM > 15 || params.heightMM > 150) {
+      material = "🏭 Outdoor signs: PA-CF or PET-CF for UV/weather resistance + strength. ⚠️ PA6-CF is hygroscopic — dry at 80°C for 8+ hours before printing. Indoor: PLA is fine.";
+    } else {
+      material = "Outdoor use: PA-CF or PET-CF recommended for UV resistance. Indoor: PLA works fine. For best results with any material, use dark filament for contrast with LED diffusion.";
+    }
   } else {
-    material = "Standalone letters: ASA/PETG for outdoors, PLA for indoor. Consider painting with spray primer + paint for a premium finish.";
+    material = "Indoor signs: PLA is perfectly adequate and easiest to print. For outdoor use, upgrade to ASA, PETG, or engineering materials like PA-CF.";
   }
 
-  return { font, size, style, material };
+  // Nozzle recommendations
+  let nozzle = "";
+  const needsEngineeringMaterials = isOutdoor && (params.depthMM > 15 || params.heightMM > 150);
+  if (needsEngineeringMaterials) {
+    nozzle = "🔧 For fiber-reinforced filaments (PA-CF, PET-CF), use a 0.6mm hardened steel nozzle. Standard 0.4mm brass works for PLA/PETG but avoid for CF materials.";
+  } else {
+    nozzle = "🔧 Standard 0.4mm nozzle works fine for PLA/PETG/ASA. For best results with fine details, 0.4mm recommended. 0.6mm OK for faster prints.";
+  }
+
+  // Print orientation guidance
+  const orientation = "📐 Orient letters with the smallest dimension vertical for maximum build speed and Z-axis strength. This minimizes layer adhesion stress points.";
+
+  // Batch printing recommendations
+  let batch = "";
+  if (isNoBackplate) {
+    batch = "🏭 Use 'Print by Object' mode in Bambu Studio for batches of individual letters — prevents over-cooling between layers and improves surface finish.";
+  } else {
+    batch = "Print face plate and back plate separately for best results. Use single-object mode for optimal print quality on each component.";
+  }
+
+  // Structural warnings and advice
+  let structural = "";
+  if (isNoBackplate && thinFont && params.depthMM < 15) {
+    structural = "⚠️ Fragile configuration: Thin fonts (Poiret One) at <15mm depth are prone to breaking. Increase depth to 15mm+ or choose bolder font.";
+  } else if (isVeryLarge && !params.housing) {
+    structural = "💡 Very large signs (300mm+): Consider hollow interior to save filament and reduce weight while maintaining strength.";
+  } else if (connectedScript) {
+    structural = "✅ Connected script (Great Vibes): Letters join together for structural integrity — ideal for no-backplate mounting with excellent strength-to-weight ratio.";
+  } else if (isNoBackplate && params.depthMM >= 15) {
+    structural = "✅ Good structural design: 15mm+ depth provides adequate strength for standalone letters. Bold fonts further improve durability.";
+  } else {
+    structural = "Structural design looks solid. No major concerns with current configuration.";
+  }
+
+  // Hollow interior recommendation for large signs
+  let hollow = "";
+  if (params.heightMM >= 100 && !params.housing) {
+    const materialSavings = Math.round((1 - (1.5 * 2) / Math.min(params.heightMM, params.depthMM)) * 60); // Rough calculation
+    hollow = `💡 Consider hollow interior: For signs ≥100mm, hollowing saves ~${materialSavings}% material while maintaining strength. Shell thickness: 1.5mm recommended.`;
+  }
+
+  return { font, material, nozzle, orientation, batch, structural, hollow };
 }
 
 // ═══ URL Params for Share Links ══════════════════════════════════════════
@@ -221,6 +245,7 @@ function encodeParamsToURL(params: Params): string {
     lb: String(params.ledBrightness),
     nbm: params.noBackplateMountType,
     hl: params.haloLED ? "1" : "0",
+    hi: params.hollowInterior ? "1" : "0",
   };
   const sp = new URLSearchParams(data);
   return `${window.location.origin}${window.location.pathname}?${sp.toString()}`;
@@ -257,6 +282,7 @@ function decodeParamsFromURL(): Partial<Params> | null {
   if (sp.has("lb")) result.ledBrightness = Number(sp.get("lb"));
   if (sp.has("nbm")) result.noBackplateMountType = sp.get("nbm") as NoBackplateMountType;
   if (sp.has("hl")) result.haloLED = sp.get("hl") === "1";
+  if (sp.has("hi")) result.hollowInterior = sp.get("hi") === "1";
   return result;
 }
 
@@ -1173,6 +1199,67 @@ function addLEDVisualization(
 
 // ═══ Assembly Generation ═════════════════════════════════════════════════
 
+function createHollowLetter(char: string, font: Font, params: Params): THREE.Mesh {
+  const h = params.heightMM * MM * params.scaleFactor;
+  const d = params.depthMM * MM * params.scaleFactor;
+  const shellThickness = 1.5 * MM * params.scaleFactor;
+  
+  // Create the outer letter geometry
+  const outerGeo = new TextGeometry(char, { font, size: h, depth: d, curveSegments: 4, bevelEnabled: false });
+  outerGeo.computeBoundingBox();
+  const bb = outerGeo.boundingBox!;
+  outerGeo.translate(-bb.min.x, -(bb.min.y + bb.max.y) / 2, -bb.min.z);
+  const outerMesh = makeMesh(outerGeo, 0xcccccc);
+  outerMesh.updateMatrixWorld(true);
+
+  // Check if letter is large enough for hollowing (minimum wall thickness)
+  const letterWidth = bb.max.x - bb.min.x;
+  const letterHeight = bb.max.y - bb.min.y;
+  const minDimension = Math.min(letterWidth, letterHeight);
+  
+  if (minDimension < shellThickness * 4) {
+    // Too small to hollow safely, return solid letter
+    outerMesh.userData.char = char;
+    return outerMesh;
+  }
+
+  try {
+    // Create inner geometry (slightly smaller)
+    const innerScale = 1 - (shellThickness * 2) / minDimension;
+    const innerD = Math.max(d - shellThickness * 2, shellThickness); // Leave back and front walls
+    
+    const innerGeo = new TextGeometry(char, { 
+      font, 
+      size: h * innerScale, 
+      depth: innerD, 
+      curveSegments: 4, 
+      bevelEnabled: false 
+    });
+    innerGeo.computeBoundingBox();
+    const innerBB = innerGeo.boundingBox!;
+    
+    // Center the inner geometry relative to the outer
+    const offsetX = (letterWidth * (1 - innerScale)) / 2;
+    const offsetY = 0; // Keep vertically centered
+    const offsetZ = shellThickness; // Offset from back to create back wall
+    
+    innerGeo.translate(-innerBB.min.x + offsetX, -(innerBB.min.y + innerBB.max.y) / 2 + offsetY, -innerBB.min.z + offsetZ);
+    const innerMesh = makeMesh(innerGeo, 0xcccccc);
+    innerMesh.updateMatrixWorld(true);
+
+    // Subtract inner from outer using CSG
+    const result = safeCSG(outerMesh, innerMesh, "subtract");
+    result.userData.char = char;
+    result.userData.isHollow = true;
+    return result;
+  } catch (error) {
+    // If CSG fails, return the solid letter
+    console.warn("Hollow letter creation failed, using solid:", error);
+    outerMesh.userData.char = char;
+    return outerMesh;
+  }
+}
+
 function createMultiLineLetterMeshes(font: Font, params: Params): THREE.Mesh[] {
   const h = params.heightMM * MM * params.scaleFactor;
   const d = params.depthMM * MM * params.scaleFactor;
@@ -1220,13 +1307,21 @@ function createMultiLineLetterMeshes(font: Font, params: Params): THREE.Mesh[] {
         charIdx++;
         continue;
       }
-      const geo = new TextGeometry(ch, { font, size: h, depth: d, curveSegments: 4, bevelEnabled: false });
-      geo.computeBoundingBox();
-      const bb = geo.boundingBox!;
-      geo.translate(-bb.min.x, -(bb.min.y + bb.max.y) / 2, -bb.min.z);
-      const mesh = makeMesh(geo, 0xcccccc);
+      
+      // Use hollow letter creation if enabled and letter is large enough
+      let mesh: THREE.Mesh;
+      if (params.hollowInterior && params.heightMM >= 100 && params.backplateShape === "none") {
+        mesh = createHollowLetter(ch, font, params);
+      } else {
+        const geo = new TextGeometry(ch, { font, size: h, depth: d, curveSegments: 4, bevelEnabled: false });
+        geo.computeBoundingBox();
+        const bb = geo.boundingBox!;
+        geo.translate(-bb.min.x, -(bb.min.y + bb.max.y) / 2, -bb.min.z);
+        mesh = makeMesh(geo, 0xcccccc);
+        mesh.userData.char = ch;
+      }
+      
       mesh.position.set(cursor, 0, 0);
-      mesh.userData.char = ch;
       mesh.updateMatrixWorld(true);
       meshes.push(mesh);
       cursor += widths[charIdx] + gap;
@@ -1590,6 +1685,8 @@ function createZipBlob(files: Record<string, string | Uint8Array>): Blob {
 function generateAssemblyInstructions(params: Params, mountingPoints: MountingPoint[], dims?: string, assembly?: { letters?: THREE.Mesh[]; face?: THREE.Mesh; back?: THREE.Mesh; cleat?: THREE.Mesh; diffuser?: THREE.Mesh }): string {
   const text = params.lines.map(l => l.text).join(" ");
   const isNoBackplate = params.backplateShape === "none";
+  const isOutdoor = params.heightMM >= 80; // Assume larger signs are outdoor
+  const needsEngineeringMaterial = isOutdoor && (params.depthMM > 15 || params.heightMM > 150);
   
   let instructions = `# Speak23D Assembly Instructions
 Sign: "${text}"
@@ -1600,6 +1697,55 @@ Created: ${new Date().toLocaleDateString()}
 ## Overview
 ${isNoBackplate ? `This is a floating letter sign with no backplate. Each letter mounts individually to the wall.` : `This is a full housing sign with backplate and face plate.`}
 
+## Print Settings & Material Recommendations
+
+### Print Orientation
+⚡ **CRITICAL:** Orient each piece with the smallest dimension vertical for maximum build speed and Z-axis strength.
+
+### Material Selection
+${needsEngineeringMaterial ? `
+🏭 **Outdoor Signs (Recommended):**
+- PA-CF (PA6 Carbon Fiber) or PET-CF for UV/weather resistance + strength
+- ⚠️ **IMPORTANT:** PA6-CF is hygroscopic — dry at 80°C for 8+ hours before printing
+- Alternative: ASA or PETG for standard outdoor durability
+
+🏠 **Indoor Signs:** PLA is perfectly adequate and easier to print
+` : `
+🏠 **Indoor Signs:** PLA recommended (easiest to print)
+🌤️ **Outdoor Signs:** ASA, PETG, or PA-CF for UV resistance
+`}
+
+### Nozzle Requirements
+${needsEngineeringMaterial ? `
+🔧 **For fiber-reinforced materials (PA-CF, PET-CF):**
+- **Required:** 0.6mm hardened steel nozzle
+- Standard 0.4mm brass nozzles will be damaged by carbon fibers
+
+🔧 **For standard materials (PLA/PETG/ASA):** 0.4mm nozzle works fine
+` : `
+🔧 Standard 0.4mm nozzle works for PLA/PETG/ASA
+🔧 For faster prints, 0.6mm nozzle acceptable
+`}
+
+### Batch Printing Tips
+${isNoBackplate ? `
+🏭 **Individual Letters:** Use 'Print by Object' mode in Bambu Studio
+- Prevents over-cooling between layers
+- Improves surface finish and strength
+- Print letters in batches that fit your build plate
+` : `
+🏭 Print face plate and back plate separately for best results
+`}
+
+${needsEngineeringMaterial ? `
+### Advanced Processing (Optional)
+🔥 **Annealing for Maximum Strength:** 
+- Heat treat PA-CF/PET-CF parts at 120-130°C for 5-8 hours
+- Increases mechanical properties by 10-20%
+- ⚠️ Account for ~1-2% shrinkage during annealing
+
+` : ''}
+
 ## Parts List
 `;
 
@@ -1608,45 +1754,47 @@ ${isNoBackplate ? `This is a floating letter sign with no backplate. Each letter
 `;
     assembly.letters.forEach((letter, i) => {
       const char = letter.userData?.char || `Letter${i+1}`;
-      instructions += `- ${char}.3mf - Letter "${char}"\n`;
+      const isHollow = letter.userData?.isHollow ? " (hollow)" : "";
+      instructions += `- ${char}.3mf - Letter "${char}"${isHollow}\n`;
     });
 
     if (params.noBackplateMountType === "flush") {
       instructions += `
 ### Hardware (for flush mount)
 Per mounting point (${mountingPoints.length} total):
-- 1x M3 x 25mm screw (or appropriate length for your wall)
-- 1x M3 wall anchor (rawl plug/drywall anchor as appropriate)
+- 1x M3 x 25mm Pan Head screw (or appropriate length for your wall)
+- 1x M3 wall anchor (rawl plug for masonry, drywall anchor for drywall)
 
 ### Tools Required
 - Drill with 3mm bit for pilot holes
 - 6mm bit for counterbores (if pre-drilling)
-- Level
+- Level (24" recommended)
 - Pencil for marking
+- Screwdriver or drill driver
 `;
     } else if (params.noBackplateMountType === "standoff") {
       instructions += `
 ### Hardware (for standoff mount)
 Per mounting point (${mountingPoints.length} total):
 - 1x M3 x 40mm threaded rod
-- 2x M3 nuts
+- 2x M3 hex nuts
 - 1x M3 wall anchor
-- 1x M3 x 10mm spacer/washer (optional for fine adjustment)
+- 1x 12mm aluminum spacer/standoff (optional for fine adjustment)
 
 ### Tools Required
 - Drill with 3mm bit
-- Level
-- Allen keys or screwdriver
+- Level (24" recommended)
+- 5.5mm wrench or socket for M3 nuts
 `;
     } else {
       instructions += `
-### Hardware (adhesive mount)
-- High-strength double-sided tape or VHB tape
-- Surface cleaner/degreaser
+### Hardware (adhesive mount - indoor only)
+- 3M VHB tape (4910 or 4991) or high-strength double-sided mounting tape
+- Surface cleaner/degreaser (IPA 70%+)
 
 ### Tools Required
-- Level
-- Cleaning cloth
+- Level (24" recommended)
+- Clean microfiber cloth
 `;
     }
 
@@ -1657,56 +1805,66 @@ Per mounting point (${mountingPoints.length} total):
 1. Hold letters against wall in desired position
 2. Use level to ensure proper alignment
 3. Mark outline lightly with pencil if needed
+4. Consider viewing distance and lighting conditions
 
 `;
 
     if (params.noBackplateMountType === "flush") {
       instructions += `### Step 2: Drilling Template
 1. Print the included drilling_template.svg at 100% scale (no scaling)
-2. Tape template to wall in desired position
+2. Tape template to wall in desired position using painter's tape
 3. Use 3mm drill bit to create pilot holes through template
-4. Remove template
+4. For masonry: use masonry bit and rawl plugs
+5. For drywall: use appropriate drywall anchors
+6. Remove template
 
 ### Step 3: Mount Letters
 1. Align each letter with its mounting holes over the drilled pilots
 2. Drive M3 screws through the back of each letter into the wall anchors
-3. Screws should sit flush with the back surface of the letters
-4. Check alignment and adjust as needed
+3. Screws should sit flush with the back surface (countersunk design)
+4. Check alignment with level and adjust as needed
+5. Tighten screws to finger-tight + 1/4 turn (don't over-tighten)
 `;
     } else if (params.noBackplateMountType === "standoff") {
       instructions += `### Step 2: Install Wall Anchors
-1. Mark mounting positions (see template if available)
-2. Drill 3mm pilot holes
-3. Install wall anchors
+1. Mark mounting positions using template or measurements
+2. Drill 3mm pilot holes at marked positions
+3. Install appropriate wall anchors for your wall type
 
 ### Step 3: Install Standoffs
 1. Thread M3 nuts onto threaded rods, about 15mm from wall end
 2. Screw threaded rods into wall anchors, leaving 12mm extending from wall
-3. Slide letters onto threaded rods from front
-4. Secure with second M3 nut, tightening against back of letter
+3. Check alignment with level
+4. Slide letters onto threaded rods from front
+5. Secure with second M3 nut, tightening against back of letter
+6. Creates premium 12mm floating effect with halo shadow
 `;
     } else {
       instructions += `### Step 2: Surface Preparation
-1. Clean wall surface with degreaser
-2. Let dry completely
-3. Clean back surface of letters
+1. Clean wall surface with 70%+ isopropyl alcohol
+2. Let dry completely (wait 5+ minutes)
+3. Clean back surface of letters with IPA
+4. Remove any dust or oils
 
 ### Step 3: Apply Adhesive
-1. Apply VHB tape to back of each letter
-2. Remove backing when ready to mount
-3. Press firmly against wall for 30 seconds each
-4. Allow 24 hours for full bond strength
+1. Apply VHB tape to back of each letter (full coverage recommended)
+2. Remove backing when ready to mount (work quickly)
+3. Press firmly against wall for 30 seconds each letter
+4. Apply steady, even pressure across entire letter
+5. Allow 24-48 hours for full bond strength (adhesive continues to strengthen)
 `;
     }
 
     if (params.haloLED) {
       instructions += `
-### Step 4: LED Installation (Optional Halo Effect)
-1. Route LED strip behind each letter in the recessed channels
-2. Connect LED strips in series or parallel as needed
-3. Connect to appropriate power supply (5V/12V depending on strips)
-4. Test before final mounting
-5. Use cable management to hide wiring
+### Step 4: Halo LED Installation (Optional)
+1. Route 5V LED strip behind each letter in the recessed channels
+2. Use 6mm wide LED strips for best fit in channels
+3. Connect LED strips in parallel (not series) for consistent brightness
+4. Connect to 5V power supply rated for total LED strip wattage
+5. Test all connections before final mounting
+6. Use small cable clips or channel routing to hide wiring
+7. Consider smart controller for dimming/color changing
 `;
     }
 
@@ -1716,36 +1874,53 @@ Per mounting point (${mountingPoints.length} total):
 - face_plate.3mf - Main face with letters
 - back_plate.3mf - Housing back with LED channels
 ${params.mountType === "french_cleat" ? "- wall_cleat.3mf - Wall mounting cleat\n" : ""}
-- diffuser.3mf - LED light diffuser
+- diffuser.3mf - LED light diffuser (0.8mm thick for even glow)
 
 ### Hardware
-${params.mountType === "french_cleat" ? "- French cleat mounting (no screws needed)\n" : 
-  params.mountType === "2hole" || params.mountType === "4hole" ? `- ${params.mountType === "2hole" ? "2" : "4"}x M${params.holeDiameterMM} screws and anchors\n` :
-  params.mountType === "keyhole" ? "- 2x M5 screws with washers\n" : ""}
-- LED strip (${LED_CHANNELS[params.ledType][0]}mm width, ${params.ledType.includes("5v") ? "5V" : "12V"})
-- LED power supply
+${params.mountType === "french_cleat" ? "- French cleat mounting (no additional screws needed)\n" : 
+  params.mountType === "2hole" || params.mountType === "4hole" ? `- ${params.mountType === "2hole" ? "2" : "4"}x M${params.holeDiameterMM} x 35mm screws and wall anchors\n` :
+  params.mountType === "keyhole" ? "- 2x M5 x 25mm pan head screws with washers\n" : ""}
+- LED strip: ${LED_CHANNELS[params.ledType][0]}mm width, ${params.ledType.includes("5v") ? "5V" : "12V"} DC
+- LED power supply: ${params.ledType.includes("5v") ? "5V" : "12V"} DC, 60W minimum recommended
+- Wire management: 18-22 AWG stranded wire, IP65 connectors for outdoor
 
-### Installation
-1. Print all parts in ASA or PETG for outdoor use
-2. Install LED strips in back plate channels
-3. Connect to power supply and test
-4. Install diffuser in face plate
-5. Assemble face and back plates
-${params.mountType === "french_cleat" ? "6. Install wall cleat with screws\n7. Hang sign on cleat" : 
-  "6. Mark and drill mounting holes\n7. Mount to wall with screws"}
+### Assembly Steps
+1. Print all parts using recommended materials above
+2. Install LED strips in back plate channels (use channel-compatible adhesive strips)
+3. Route wiring through integrated wire management channels
+4. Connect to power supply and test full brightness
+5. Install diffuser in face plate (should fit snugly)
+6. Assemble face and back plates with integrated clips/alignment features
+${params.mountType === "french_cleat" ? "7. Install wall cleat with appropriate wall anchors\n8. Hang sign on cleat - should slide into place securely" : 
+  "7. Mark mounting hole positions on wall\n8. Drill and install appropriate anchors\n9. Mount to wall with provided screws"}
 `;
   }
 
   instructions += `
-## Notes
-- For outdoor installation, use weather-resistant hardware
-- Ensure all electrical connections are weatherproofed
-- Test LED functionality before final installation
-- Check local electrical codes for outdoor LED installations
+## Important Notes & Safety
+- 🌤️ For outdoor installation, use stainless steel or galvanized hardware
+- 💡 All electrical connections must be weatherproofed (IP65+ rating)
+- ⚡ Test LED functionality before final installation
+- 📋 Check local electrical codes for outdoor LED installations
+- 🔧 Use thread locker on screws in high-vibration areas
+- 🧹 Regular maintenance: clean quarterly, check connections annually
 
-## Support
+## Troubleshooting
+- **Letters feel fragile:** Increase depth to 15mm+ or choose bolder font
+- **LEDs dim/flickering:** Check power supply capacity, use higher gauge wire
+- **Poor wall adhesion (VHB):** Ensure surface prep, allow full cure time
+- **Visible mounting holes:** Use countersunk screws, check drill bit size
+
+## Technical Support
 Generated by Speak23D (speak23d.vercel.app)
-For support: https://tonicthoughtstudios.com
+Manufacturing guidance: https://tonicthoughtstudios.com/speak23d
+Report issues: support@tonicthoughtstudios.com
+
+Print Settings Used:
+- Layer Height: 0.2mm recommended
+- Infill: 20% for letters, 15% for housing
+- Supports: Auto-generated for overhangs >45°
+- Build Plate Adhesion: Brim recommended for large parts
 `;
 
   return instructions;
@@ -1815,7 +1990,7 @@ function AIRecommendationsPanel({ params }: { params: Params }) {
     <div className="bg-gradient-to-br from-violet-950/40 to-blue-950/40 border border-violet-500/20 rounded-lg overflow-hidden">
       <button onClick={() => setOpen(!open)} className="flex items-center gap-2 w-full text-left px-3 py-2.5 group">
         <span className="text-lg">🤖</span>
-        <span className="text-sm font-semibold text-violet-300 flex-1">AI Recommendations</span>
+        <span className="text-sm font-semibold text-violet-300 flex-1">Manufacturing AI Assistant</span>
         <span className={`text-violet-500 text-xs transition-transform ${open ? "rotate-180" : ""}`}>▼</span>
       </button>
       {open && (
@@ -1823,31 +1998,54 @@ function AIRecommendationsPanel({ params }: { params: Params }) {
           <div>
             <div className="flex items-center gap-1.5 mb-0.5">
               <span>🔤</span>
-              <span className="font-semibold text-zinc-300">Font</span>
+              <span className="font-semibold text-zinc-300">Font Choice</span>
             </div>
             <p className="text-zinc-400 leading-relaxed">{recs.font}</p>
           </div>
           <div>
             <div className="flex items-center gap-1.5 mb-0.5">
-              <span>📏</span>
-              <span className="font-semibold text-zinc-300">Size</span>
-            </div>
-            <p className="text-zinc-400 leading-relaxed">{recs.size}</p>
-          </div>
-          <div>
-            <div className="flex items-center gap-1.5 mb-0.5">
-              <span>🎨</span>
-              <span className="font-semibold text-zinc-300">Style</span>
-            </div>
-            <p className="text-zinc-400 leading-relaxed">{recs.style}</p>
-          </div>
-          <div>
-            <div className="flex items-center gap-1.5 mb-0.5">
               <span>🧱</span>
-              <span className="font-semibold text-zinc-300">Material</span>
+              <span className="font-semibold text-zinc-300">Material Guidance</span>
             </div>
             <p className="text-zinc-400 leading-relaxed">{recs.material}</p>
           </div>
+          <div>
+            <div className="flex items-center gap-1.5 mb-0.5">
+              <span>🔧</span>
+              <span className="font-semibold text-zinc-300">Nozzle & Hardware</span>
+            </div>
+            <p className="text-zinc-400 leading-relaxed">{recs.nozzle}</p>
+          </div>
+          <div>
+            <div className="flex items-center gap-1.5 mb-0.5">
+              <span>📐</span>
+              <span className="font-semibold text-zinc-300">Print Orientation</span>
+            </div>
+            <p className="text-zinc-400 leading-relaxed">{recs.orientation}</p>
+          </div>
+          <div>
+            <div className="flex items-center gap-1.5 mb-0.5">
+              <span>🏭</span>
+              <span className="font-semibold text-zinc-300">Batch Printing</span>
+            </div>
+            <p className="text-zinc-400 leading-relaxed">{recs.batch}</p>
+          </div>
+          <div>
+            <div className="flex items-center gap-1.5 mb-0.5">
+              <span>🏗️</span>
+              <span className="font-semibold text-zinc-300">Structural Analysis</span>
+            </div>
+            <p className="text-zinc-400 leading-relaxed">{recs.structural}</p>
+          </div>
+          {recs.hollow && (
+            <div>
+              <div className="flex items-center gap-1.5 mb-0.5">
+                <span>💡</span>
+                <span className="font-semibold text-zinc-300">Material Optimization</span>
+              </div>
+              <p className="text-zinc-400 leading-relaxed">{recs.hollow}</p>
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -2475,6 +2673,20 @@ export default function Speak23D() {
                 <Slider label="Backplate Padding" value={params.paddingMM} onChange={(v) => updateParam("paddingMM", v)} min={3} max={30} unit="mm" />
                 <Slider label="Wall Thickness" value={params.wallThickMM} onChange={(v) => updateParam("wallThickMM", v)} min={1} max={8} step={0.5} unit="mm" />
                 <Slider label="Scale Factor" value={params.scaleFactor} onChange={(v) => updateParam("scaleFactor", v)} min={0.5} max={3.0} step={0.1} unit="×" />
+                
+                {/* Hollow Interior Toggle - only show for large signs without backplate */}
+                {params.heightMM >= 100 && params.backplateShape === "none" && (
+                  <div className="flex items-center justify-between bg-gradient-to-r from-emerald-900/30 to-teal-900/30 border border-emerald-500/20 rounded-lg px-3 py-2">
+                    <div>
+                      <p className="text-sm font-medium text-emerald-200">💡 Hollow Interior</p>
+                      <p className="text-xs text-emerald-300">Save ~60% material, 1.5mm shell</p>
+                    </div>
+                    <button onClick={() => updateParam("hollowInterior", !params.hollowInterior)}
+                      className={`relative w-11 h-6 rounded-full transition-colors ${params.hollowInterior ? "bg-emerald-500" : "bg-zinc-600"}`}>
+                      <span className={`absolute top-0.5 w-5 h-5 rounded-full bg-white transition-transform ${params.hollowInterior ? "translate-x-5" : "translate-x-0.5"}`} />
+                    </button>
+                  </div>
+                )}
               </div>
             )}
 
